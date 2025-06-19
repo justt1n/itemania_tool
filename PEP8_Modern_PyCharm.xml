@@ -1,0 +1,55 @@
+<code_scheme name="PEP8 Modern v2" version="173">
+  <!-- 
+    Phiên bản v2: Cấu trúc lại để gom tất cả cài đặt Python vào một nơi,
+    nhằm tăng tính tương thích với các phiên bản PyCharm khác nhau.
+  -->
+  <option name="RIGHT_MARGIN" value="99" />
+  <option name="WRAP_WHEN_TYPING_REACHES_RIGHT_MARGIN" value="true" />
+  
+  <codeStyleSettings language="Python">
+    <!-- Blank Lines -->
+    <option name="BLANK_LINES_AROUND_TOP_LEVEL_CLASSES_FUNCTIONS" value="2" />
+    <option name="KEEP_BLANK_LINES_IN_DECLARATIONS" value="2" />
+    <option name="KEEP_BLANK_LINES_IN_CODE" value="1" />
+    <option name="KEEP_BLANK_LINES_BEFORE_RBRACE" value="1" />
+
+    <!-- Spaces -->
+    <option name="SPACE_AROUND_ASSIGNMENT_OPERATORS" value="true" />
+    <option name="SPACE_AROUND_LOGICAL_OPERATORS" value="true" />
+    <option name="SPACE_AROUND_EQUALITY_OPERATORS" value="true" />
+    <option name="SPACE_AROUND_RELATIONAL_OPERATORS" value="true" />
+    <option name="SPACE_AROUND_BITWISE_OPERATORS" value="true" />
+    <option name="SPACE_AROUND_ADDITIVE_OPERATORS" value="true" />
+    <option name="SPACE_AROUND_MULTIPLICATIVE_OPERATORS" value="true" />
+    <option name="SPACE_AROUND_SHIFT_OPERATORS" value="true" />
+    <option name="SPACE_BEFORE_METHOD_PARENTHESES" value="false" />
+    <option name="SPACE_AFTER_COMMA" value="true" />
+    <option name="SPACE_BEFORE_COMMA" value="false" />
+    <option name="SPACE_AFTER_NUMBER_SIGN" value="true" />
+    <option name="SPACE_BEFORE_NUMBER_SIGN" value="true" />
+    
+    <!-- Wrapping -->
+    <option name="WRAP_LONG_LINES" value="true" />
+    <option name="WRAP_ON_TYPING" value="1" />
+    <option name="ALIGN_MULTILINE_PARAMETERS" value="false" />
+    <option name="ALIGN_MULTILINE_PARAMETERS_IN_CALLS" value="false" />
+    
+    <!-- Imports -->
+    <option name="OPTIMIZE_IMPORTS_SORT_NAMES_IN_FROM_IMPORTS" value="true" />
+    <option name="OPTIMIZE_IMPORTS_JOIN_FROM_IMPORTS_WITH_SAME_SOURCE" value="true" />
+
+    <!-- Indentation -->
+    <indentOptions>
+      <option name="INDENT_SIZE" value="4" />
+      <option name="CONTINUATION_INDENT_SIZE" value="4" />
+      <option name="TAB_SIZE" value="4" />
+      <option name="USE_TAB_CHARACTER" value="false" />
+    </indentOptions>
+  </codeStyleSettings>
+
+  <!-- Cấu hình sắp xếp Imports cho Python (phần này tách riêng là đúng chuẩn) -->
+  <Python>
+    <option name="OPTIMIZE_IMPORTS_ORDER" value="STDLIB,THIRDPARTY,FIRSTPARTY,LOCALFOLDER" />
+  </Python>
+</code_scheme>
+
