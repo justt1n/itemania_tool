@@ -262,9 +262,50 @@ class ExtraInfor(BaseGSheetModel):
         return game_list
 
 
-class DD(BaseGSheetModel):
-    DD_CHECK: Annotated[int | None, "B"] = 0
-    DD_PRODUCT_NAME: Annotated[str | None, "C"] = 0
-    DD_PRODUCT_LINK: Annotated[str | None, "D"] = 0
-    DD_STOCKMIN: Annotated[int | None, "G"] = 0
-    DD_LEVELMIN: Annotated[int | None, "H"] = 0
+class IM(BaseGSheetModel):
+    IM_CHECK: Annotated[int | None, "B"] = 0
+    IM_PRODUCT_LINK: Annotated[str | None, "F"] = 0
+    IM_PRODUCT_COMPARE: Annotated[str | None, "G"] = 0
+    IM_INCLUDE_KEYWORD: Annotated[str | None, "H"] = ''
+    IM_EXCLUDE_KEYWORD: Annotated[str | None, "I"] = ''
+    IM_DONGIA_GIAM_MIN: Annotated[float | None, "J"] = 0
+    IM_IS_UPDATE_ORDER_MIN: Annotated[int | None, "K"] = 0
+    IM_TOTAL_ORDER_MIN: Annotated[int | None, "L"] = 0
+    IM_HE_SO_LAM_TRON: Annotated[int | None, "M"] = 0
+    IM_QUANTITY_GET_PRICE: Annotated[int | None, "N"] = 0
+    IM_ID_SHEET_MIN: Annotated[str | None, "O"] = ''
+    IM_SHEET_MIN: Annotated[str | None, "P"] = ''
+    IM_CELL_MIN: Annotated[str | None, "Q"] = ''
+    IM_ID_SHEET_MAX: Annotated[str | None, "R"] = ''
+    IM_SHEET_MAX: Annotated[str | None, "S"] = ''
+    IM_CELL_MAX: Annotated[str | None, "T"] = ''
+    IM_ID_SHEET_STOCK: Annotated[str | None, "U"] = ''
+    IM_SHEET_STOCK: Annotated[str | None, "V"] = ''
+    IM_CELL_STOCK: Annotated[str | None, "W"] = ''
+
+    def get_im_min_price(self) -> float:
+        try:
+            sheet_manager = StockManager(self.IM_ID_SHEET_MIN)
+            cell_value = sheet_manager.get_cell_float_value(f"'{self.IM_SHEET_MIN}'!{self.IM_CELL_MIN}")
+            return float(cell_value)  # type: ignore
+        except Exception as e:
+            print("No min price IM")
+            return 0.0
+
+    def get_im_max_price(self) -> float:
+        try:
+            sheet_manager = StockManager(self.IM_ID_SHEET_MAX)
+            cell_value = sheet_manager.get_cell_float_value(f"'{self.IM_SHEET_MAX}'!{self.IM_CELL_MAX}")
+            return float(cell_value)  # type: ignore
+        except Exception as e:
+            print("No max price IM")
+            return 999999.0
+
+    def get_im_stock(self) -> int:
+        try:
+            sheet_manager = StockManager(self.IM_ID_SHEET_STOCK)
+            stock_value = sheet_manager.get_cell_float_value(f"'{self.IM_SHEET_STOCK}'!{self.IM_CELL_STOCK}")
+            return int(stock_value)  # type: ignore
+        except Exception as e:
+            print("No stock value IM")
+            return -1

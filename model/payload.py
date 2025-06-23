@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 from model.crawl_model import OfferItem, StockNumInfo
 from model.enums import StockType
 from utils.sheet_operator import query_multi_model_from_worksheet
-from .sheet_model import StockInfo, G2G, FUN, BIJ, ExtraInfor, DD
+from .sheet_model import IM
 
 
 @dataclass
@@ -87,17 +87,17 @@ class Product_:
 
 class Row:
     row_index: int
-    dd: DD
+    im: IM
 
     def __init__(
             self,
             row_index: int,
             worksheet: gspread.worksheet.Worksheet,
-            dd: DD,
+            im: IM,
     ) -> None:
         self.row_index = row_index
         self.worksheet = worksheet
-        self.dd = dd
+        self.im = im
 
     @staticmethod
     def from_row_index(
@@ -109,21 +109,8 @@ class Row:
                 row_index,
                 worksheet,
                 *query_multi_model_from_worksheet(
-                    worksheet, [DD], row_index
+                    worksheet, [IM], row_index
                 ),  # type: ignore
             )
         except Exception as e:
             raise Exception(f"Error getting row: {e}")
-
-
-class PriceInfo(BaseModel):
-    price_min: float
-    price_mac: float
-    adjusted_price: float
-    range_adjust: float | None = None
-    offer_item: OfferItem
-    stock_type: StockType
-    stock_num_info: StockNumInfo
-    ref_seller: str | None
-    ref_price: float | None
-

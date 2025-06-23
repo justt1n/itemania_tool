@@ -14,9 +14,14 @@ from app.process import get_row_run_index
 from decorator.retry import retry
 from decorator.time_execution import time_execution
 from model.payload import Row
-from utils.dd_utils import get_dd_min_price
+# from utils.dd_utils import get_dd_min_price
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 from utils.exceptions import PACrawlerError
 from utils.ggsheet import GSheet, Sheet
+from utils.im_utils import get_im_min_price
 from utils.logger import setup_logging
 
 ### SETUP ###
@@ -113,7 +118,8 @@ def process(
         if not isinstance(row, Row):
             continue
         try:
-            min_price = get_dd_min_price(row.dd)
+            sd = create_selenium_driver()
+            min_price = get_im_min_price(sd, row.im)
             if min_price is None:
                 print("No item info")
             else:
@@ -138,6 +144,17 @@ def process(
         _current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         write_to_log_cell(worksheet, index, _current_time, log_type="time")
         print("Next row...")
+
+
+def create_selenium_driver():
+    options = Options()
+    options.add_argument("--headless")  # Run in headless mode
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    print("Creating Selenium driver...")
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    print("Selenium driver created successfully.")
+    return driver
 
 
 def write_to_log_cell(
