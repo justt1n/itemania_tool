@@ -1,11 +1,13 @@
 import math
 import re
+import time
 from typing import Optional, List, Dict, Union
 
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.common import WebDriverException, TimeoutException
+from selenium.webdriver import Keys
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.webdriver import WebDriver
@@ -17,9 +19,15 @@ from selenium.webdriver.support import expected_conditions as EC
 from model.sheet_model import IM
 
 
+class QuantityItem(BaseModel):
+    min: int
+    max: int
+
+
 class PriceItem(BaseModel):
     title: str
-    quantity: float
+    min_quantity: float
+    max_quantity: float
     price: float
     info: str
 
@@ -27,10 +35,48 @@ class PriceItem(BaseModel):
         arbitrary_types_allowed = True
 
 
-def get_page_source_by_url_by_selenium(sd: WebDriver, url: str) -> Optional[str]:
+def _extract_quantity_from_text(text: str) -> Optional[QuantityItem]:
+    if not text:
+        return None
+    s = text.strip()
+    s = s.split("~")
+    if len(s) == 1:
+        quantity = _parse_korean_number_string(s[0].strip())
+        return QuantityItem(
+            min=quantity,
+            max=quantity
+        )
+    elif len(s) == 2:
+        _min = _parse_korean_number_string(s[0].strip())
+        _max = _parse_korean_number_string(s[1].strip())
+        return QuantityItem(
+            min=_min,
+            max=_max
+        )
+    else:
+        print(f"Error: Wrong format for quantity string: {text}")
+        return None
+
+
+def get_page_source_by_url_by_selenium(sd: WebDriver, url: str, im: IM) -> Optional[str]:
     print(f"Đang điều hướng tới URL: {url}")
     try:
         sd.get(url)
+
+        try:
+            search_box = WebDriverWait(sd, 10).until(
+                EC.element_to_be_clickable((By.ID, "word"))
+            )
+
+            search_box.clear()  # Clear any default text
+            search_box.send_keys(im.IM_INCLUDE_KEYWORD)  # Type your desired search term
+
+            search_box.send_keys(Keys.RETURN)  # Simulate pressing the Enter key
+
+            time.sleep(2)
+
+        except Exception as e:
+            print(f"Đã xảy ra lỗi: {e}")
 
         WebDriverWait(sd, 15).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, 'ul.search_list_premium > li, ul.search_list_normal > li'))
@@ -83,22 +129,6 @@ def _parse_korean_number_string(s: str) -> Optional[int]:
     return int(total_value) if total_value > 0 else None
 
 
-# --- CÁC HÀM PARSER ĐÃ ĐƯỢC NÂNG CẤP ---
-
-def _parse_max_quantity(quantity_str: str) -> Optional[int]:
-    """
-    Phân tích chuỗi số lượng, xử lý cả trường hợp có và không có '~'.
-    Sử dụng hàm lõi _parse_korean_number_string.
-    """
-    if not quantity_str:
-        return None
-
-    # Nếu có '~', lấy phần sau. Nếu không, lấy toàn bộ chuỗi.
-    target_str = quantity_str.split('~')[-1]
-
-    return _parse_korean_number_string(target_str)
-
-
 def _parse_unit_price(price_str: str) -> Optional[float]:
     """
     Sử dụng Regex (phiên bản non-greedy) để trích xuất đơn giá một cách chính xác
@@ -128,8 +158,8 @@ def _parse_unit_price(price_str: str) -> Optional[float]:
         except Exception as e:
             print(f"Error while parsing unit price from '{price_str}': {e}")
             return None
-
-    return None
+    else:
+        return _parse_korean_number_string(price_str)
 
 
 def get_im_min_price_in_source(page_source: str, im: IM, min_price_sheet, max_price_sheet) -> Optional[PriceItem]:
@@ -166,18 +196,19 @@ def get_im_min_price_in_source(page_source: str, im: IM, min_price_sheet, max_pr
             quantity_raw = quantity_element.get_text(strip=True) if quantity_element else None
             price_raw = price_element.get_text(strip=True) if price_element else None
 
-            quantity = _parse_max_quantity(quantity_raw)
+            quantity = _extract_quantity_from_text(quantity_raw)
             price = _parse_unit_price(price_raw)
 
             if price is not None and quantity is not None:
-                if price < 390:
+                if price < min_price_sheet:
                     continue
-                if price > 480:
+                if price > max_price_sheet:
                     continue
                 all_items.append(
                     PriceItem(
                         title=title,
-                        quantity=quantity,
+                        min_quantity=quantity.min,
+                        max_quantity=quantity.max,
                         price=price,
                         info=info
                     )
@@ -211,7 +242,7 @@ def get_im_min_price(sd: WebDriver, im: IM) -> Optional[PriceItem]:
         if not url:
             print("Không có URL để so sánh sản phẩm.")
             return None
-        page_source = get_page_source_by_url_by_selenium(sd, url)
+        page_source = get_page_source_by_url_by_selenium(sd, url, im)
         if not page_source:
             print("Cant get page source.")
             return None
@@ -241,62 +272,4 @@ def calculate_new_price_and_quantity(
         Một dictionary chứa 'new_price' và 'new_min_quantity' nếu thành công,
         ngược lại trả về None.
     """
-    # --- Kiểm tra các điều kiện đầu vào (Guard Clauses) ---
-    if not competitor_item or competitor_item.price <= 0:
-        print("[ERROR] Dữ liệu giá của đối thủ không hợp lệ.")
-        return None
-
-    if im_config.IM_TOTAL_ORDER_MIN is None or im_config.IM_TOTAL_ORDER_MIN <= 0:
-        print("[ERROR] Cấu hình 'IM_TOTAL_ORDER_MIN' phải là một số dương.")
-        return None
-
-    # --- Bước 1: Tính giá bán của mình ---
-    # Giá của mình = Giá đối thủ - Mức giảm giá mong muốn
-    our_price = competitor_item.price - (im_config.IM_DONGIA_GIAM_MIN or 0)
-
-    if our_price <= 0:
-        print(f"[ERROR] Giá sau khi giảm ({our_price}) không hợp lệ. "
-              f"Giá đối thủ: {competitor_item.price}, Mức giảm: {im_config.IM_DONGIA_GIAM_MIN}")
-        return None
-
-    # --- Bước 2: Tính số lượng mua tối thiểu (dạng thô) ---
-    # Số lượng cần mua để đạt được tổng tiền tối thiểu
-    raw_min_quantity = im_config.IM_TOTAL_ORDER_MIN / our_price
-
-    # --- Bước 3: Xử lý làm tròn số lượng (Logic cốt lõi) ---
-    final_min_quantity: int
-
-    # Kiểm tra xem chế độ làm tròn có được bật không
-    if im_config.IM_IS_UPDATE_ORDER_MIN == 1:
-        # Chế độ làm tròn BẬT
-        rounding_factor = im_config.IM_HE_SO_LAM_TRON
-
-        # Đảm bảo hệ số làm tròn hợp lệ, nếu không thì mặc định là 1 (làm tròn lên số nguyên gần nhất)
-        if not rounding_factor or rounding_factor < 1:
-            rounding_factor = 1
-
-        # Công thức làm tròn lên theo hệ số:
-        # Ví dụ: raw = 1331.29, factor = 10
-        # 1. 1331.29 / 10 = 133.129
-        # 2. math.ceil(133.129) = 134
-        # 3. 134 * 10 = 1340
-        final_min_quantity = math.ceil(raw_min_quantity / rounding_factor) * rounding_factor
-    else:
-        # Chế độ làm tròn TẮT: chỉ làm tròn lên số nguyên gần nhất
-        final_min_quantity = math.ceil(raw_min_quantity)
-
-    # --- Bước 4: So sanh voi so luong min max ---
-    # Nếu số lượng tối thiểu tính được nhỏ hơn số lượng tối thiểu trong cấu hình,
-    # thì sử dụng số lượng tối thiểu trong cấu hình
-    if our_price < im_config.min_price_sheet:
-        final_min_quantity = im_config.min_price_sheet
-    elif final_min_quantity > im_config.max_price_sheet:
-        final_min_quantity = im_config.IM_MAX_UNIT
-    # --- Trả về kết quả ---
-    result = {
-        'new_price': our_price,
-        'new_min_quantity': final_min_quantity
-    }
-    return result
-
-
+    pass

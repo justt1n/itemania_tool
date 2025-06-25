@@ -104,7 +104,7 @@ def process(
         print(f"Error getting worksheet: {e}")
         return
     row_indexes = get_row_run_index(worksheet=worksheet)
-
+    sd = create_selenium_driver()
     for index in row_indexes:
         status = "NOT FOUND"
         print(f"Row: {index}")
@@ -118,17 +118,15 @@ def process(
         if not isinstance(row, Row):
             continue
         try:
-            sd = create_selenium_driver()
             min_price = get_im_min_price(sd, row.im)
             if min_price is None:
                 print("No item info")
             else:
-                print(f"Min price: {min_price[0]}")
-                print(f"Title: {min_price[1]}")
+                print(f"Min price: {min_price.price}")
+                print(f"Title: {min_price.title}")
                 status = "FOUND"
-                write_to_log_cell(worksheet, index, min_price[0], log_type="price")
-                write_to_log_cell(worksheet, index, min_price[1], log_type="title")
-                write_to_log_cell(worksheet, index, min_price[2], log_type="stock")
+                write_to_log_cell(worksheet, index, min_price.price, log_type="price")
+                # write_to_log_cell(worksheet, index, min_price.title, log_type="title")
             try:
                 _row_time_sleep = float(os.getenv("ROW_TIME_SLEEP"))
                 print(f"Sleeping for {_row_time_sleep} seconds")
@@ -140,7 +138,6 @@ def process(
         except Exception as e:
             print(f"Error calculating price change: {e}")
             continue
-        write_to_log_cell(worksheet, index, status, log_type="status")
         _current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         write_to_log_cell(worksheet, index, _current_time, log_type="time")
         print("Next row...")
@@ -168,13 +165,9 @@ def write_to_log_cell(
         if log_type == "status":
             r, c = a1_to_rowcol(f"E{row_index}")
         if log_type == "time":
-            r, c = a1_to_rowcol(f"F{row_index}")
+            r, c = a1_to_rowcol(f"E{row_index}")
         if log_type == "price":
-            r, c = a1_to_rowcol(f"I{row_index}")
-        if log_type == "title":
-            r, c = a1_to_rowcol(f"J{row_index}")
-        if log_type == "stock":
-            r, c = a1_to_rowcol(f"K{row_index}")
+            r, c = a1_to_rowcol(f"D{row_index}")
         worksheet.update_cell(r, c, log_str)
     except Exception as e:
         print(f"Error writing to log cell: {e}")
