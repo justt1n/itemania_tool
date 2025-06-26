@@ -21,7 +21,7 @@ from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from utils.exceptions import PACrawlerError
 from utils.ggsheet import GSheet, Sheet
-from utils.im_utils import get_im_min_price
+from utils.im_utils import get_im_min_price, EditPrice, calc_min_quantity
 from utils.logger import setup_logging
 
 ### SETUP ###
@@ -122,6 +122,13 @@ def process(
             if min_price is None:
                 print("No item info")
             else:
+                edit_object = EditPrice(
+                    price=min_price.price,
+                    quantity_per_sell=row.im.IM_QUANTITY_GET_PRICE,
+                    min_quantity=calc_min_quantity(min_price.price, row.im),
+                    max_quantity=row.im.get_im_max_price()
+                )
+                print(edit_object)
                 print(f"Min price: {min_price.price}")
                 print(f"Title: {min_price.title}")
                 status = "FOUND"
