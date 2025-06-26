@@ -1,4 +1,5 @@
 import math
+import os
 import re
 import time
 from typing import Optional, List, Dict, Union
@@ -8,15 +9,66 @@ from pydantic import BaseModel
 from selenium import webdriver
 from selenium.common import WebDriverException, TimeoutException
 from selenium.webdriver import Keys
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.support import expected_conditions as EC
 
 from model.sheet_model import IM
+
+
+def handle_new_tab_popup(web_driver: webdriver.Chrome):
+    """
+    Checks for and closes a new browser tab if it opens, then returns focus to the main tab.
+    """
+    print("Checking for new tab pop-ups...")
+    try:
+        # Get the handle of the original window
+        original_window = web_driver.current_window_handle
+
+        # Wait for a second window to appear (adjust timeout as needed)
+        WebDriverWait(web_driver, 5).until(EC.number_of_windows_to_be(2))
+
+        print("New tab detected.")
+        # Loop through all window handles
+        for window_handle in web_driver.window_handles:
+            if window_handle != original_window:
+                # Switch to the new tab
+                web_driver.switch_to.window(window_handle)
+                print(f"Switched to new tab with URL: {web_driver.current_url}")
+
+                # Close the new tab
+                web_driver.close()
+                print("New tab closed.")
+                break  # Exit loop once the new tab is found and closed
+
+        # Switch back to the original window
+        web_driver.switch_to.window(original_window)
+        print("Switched back to the main tab.")
+
+    except TimeoutException:
+        # This is good, it means no new tab opened within the timeout period.
+        print("No new tab pop-up appeared.")
+    except Exception as e:
+        print(f"An error occurred while handling new tab: {e}")
+
+
+def create_selenium_driver():
+    options = Options()
+    prefs = {"profile.default_content_setting_values.popups": 2}  # 2 = Block, 1 = Allow
+    options.add_experimental_option("prefs", prefs)
+    options.add_argument("--disable-notifications")  # Disables browser notification prompts
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])  # Hides "Chrome is being controlled" bar
+
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    print("Creating Selenium driver...")
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    print("Selenium driver created successfully.")
+    return driver
 
 
 class QuantityItem(BaseModel):
@@ -98,7 +150,6 @@ def get_page_source_by_url_by_selenium(sd: WebDriver, url: str, im: IM) -> Optio
 # --- HÀM LÕI MỚI ---
 def _parse_korean_number_string(s: str) -> Optional[int]:
     """
-    Hàm lõi, có khả năng phân tích một chuỗi số phức tạp của Hàn Quốc
     bao gồm các đơn vị '조' (nghìn tỷ), '억' (trăm triệu), '만' (chục nghìn).
     Ví dụ: '99조9,999억' -> 99999900000000
     """
@@ -107,7 +158,6 @@ def _parse_korean_number_string(s: str) -> Optional[int]:
 
     s = s.replace(',', '').strip()
 
-    # Định nghĩa các đơn vị và giá trị tương ứng
     units = {'조': 10 ** 12, '억': 10 ** 8, '만': 10 ** 4}
     total_value = 0
     current_number_str = ""
@@ -130,15 +180,9 @@ def _parse_korean_number_string(s: str) -> Optional[int]:
 
 
 def _parse_unit_price(price_str: str) -> Optional[float]:
-    """
-    Sử dụng Regex (phiên bản non-greedy) để trích xuất đơn giá một cách chính xác
-    từ chuỗi text có thể bị dính liền.
-    Ví dụ: '1당 100원최소 3,000원' -> 100
-    """
     if not price_str:
         return None
 
-    # Regex mới với quantifier non-greedy (+?)
     # Nó sẽ tìm con số ngắn nhất có thể đứng trước chữ '원'
     # Điều này giải quyết vấn đề chuỗi bị dính liền '...원최소...'
     match = re.search(r'([^당]+)당\s*([\d,]+?)\s*원', price_str)
@@ -214,11 +258,11 @@ def get_im_min_price_in_source(page_source: str, im: IM, min_price_sheet, max_pr
                     )
                 )
         except Exception as e:
-            print(f"Warning: Bỏ qua một dòng do lỗi khi phân tích: {e}")
+            print(f"Warning: ignore 1 line by error: {e}")
             continue
 
     if not all_items:
-        print("Warning: Không trích xuất được sản phẩm hợp lệ nào từ page source.")
+        print("Warning: Can not get any item from source.")
         return None
 
     if im.IM_INCLUDE_KEYWORD:
@@ -228,10 +272,10 @@ def get_im_min_price_in_source(page_source: str, im: IM, min_price_sheet, max_pr
 
     try:
         min_price_item = min(all_items, key=lambda item: item.price)
-        print(f"Success: Đã phân tích {len(all_items)} sản phẩm. Giá thấp nhất là: {min_price_item.price:,.0f}")
+        print(f"Success: Get {len(all_items)} items. Min price is {min_price_item.price:,.2f}")
         return min_price_item
     except (ValueError, TypeError):
-        print("Error: Không thể tìm thấy giá thấp nhất.")
+        print("Error: Cant get min price from source.")
         return None
 
 
@@ -240,7 +284,7 @@ def get_im_min_price(sd: WebDriver, im: IM) -> Optional[PriceItem]:
     try:
         url = im.IM_PRODUCT_COMPARE
         if not url:
-            print("Không có URL để so sánh sản phẩm.")
+            print("Empty link")
             return None
         page_source = get_page_source_by_url_by_selenium(sd, url, im)
         if not page_source:
@@ -253,13 +297,63 @@ def get_im_min_price(sd: WebDriver, im: IM) -> Optional[PriceItem]:
         return min_price
 
     except Exception as e:
-        print(f"Lỗi khi lấy giá thấp nhất: {e}")
+        print(f"Error when get min price: {e}")
         return None
 
 
+def login_first(web_driver: WebDriver):
+    try:
+        print("Login...")
+        ###LOGIN###
+        web_driver.maximize_window()
+        web_driver.get("https://trade.itemmania.com/portal/user/p_login_form.html?returnUrl=https%3A%2F%2Ftrade.itemmania.com%2F")
+        # click_element_by_text(web_driver, "로그인", "a")
+        handle_new_tab_popup(web_driver)
+        input_to_field(web_driver, os.getenv("USERNAME"), "user_id")
+        input_to_field(web_driver, os.getenv("PASSWORD"), "user_password")
+        click_element_by_text(web_driver, "로그인", "button")
+        handle_new_tab_popup(web_driver)
+        return True
+    except TimeoutException:
+        print(f"Time out when logging in.")
+        return False
+    except WebDriverException as e:
+        print(f"E WebDriver in: {e}")
+        return False
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
+def ceil_up(number: float, base: int):
+    if base <= 0 and base % 10 != 0:
+        raise ValueError("Base must be in [1,10,100,1000,...]")
+
+    result = math.ceil(number / base) * base
+
+    return int(result)
+
+
+class EditPrice(BaseModel):
+    quantity_per_sell: int
+    price: float
+    min_quantity: int = 1
+    max_quantity: int = 99999
+
+
+def calc_min_quantity(price, im: IM) -> int:
+    if im.IM_IS_UPDATE_ORDER_MIN:
+        tmp_min_quantity = ceil_up(im.IM_TOTAL_ORDER_MIN / price / im.IM_QUANTITY_GET_PRICE, im.IM_HE_SO_LAM_TRON)
+    else:
+        if im.IM_TOTAL_ORDER_MIN < price:
+            return 1
+        tmp_min_quantity = math.ceil(im.IM_TOTAL_ORDER_MIN / price / im.IM_QUANTITY_GET_PRICE)
+    return tmp_min_quantity
+
+
 def calculate_new_price_and_quantity(
-        im_config: IM,
-        competitor_item: PriceItem
+    im_config: IM,
+    competitor_item: PriceItem
 ) -> Optional[Dict[str, Union[float, int]]]:
     """
     Tính toán giá bán mới và số lượng tối thiểu dựa trên giá của đối thủ và các quy tắc trong model IM.
@@ -273,3 +367,115 @@ def calculate_new_price_and_quantity(
         ngược lại trả về None.
     """
     pass
+
+
+def input_to_field(web_driver: WebDriver, text: str, input_id: str):
+    try:
+        input_field = WebDriverWait(web_driver, 10).until(
+            EC.element_to_be_clickable((By.ID, input_id))
+        )
+
+        input_field.clear()
+
+        input_field.send_keys(text)
+
+        print("Successfully entered 'abc' into the input field.")
+    except Exception as e:
+        print(f"Error when input to field {input_id} : {e}")
+
+
+def click_element_by_text(web_driver: WebDriver, text: str, tag: str = '*'):
+    try:
+        xpath_selector = f"//{tag}[contains(text(), '{text}')]"
+
+        clickable_element = WebDriverWait(web_driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, xpath_selector))
+        )
+        clickable_element.click()
+        print(f"Successfully clicked on element with text: '{text}'")
+
+    except Exception as e:
+        print(f"Error when trying to click element with text '{text}': {e}")
+
+
+def click_element_by_text_robust(web_driver: WebDriver, text: str, tag: str = '*'):
+    """
+    Finds and clicks an element robustly based on its text content,
+    including text within child elements.
+
+    Args:
+        web_driver: The Selenium WebDriver instance.
+        text: The visible text (or a unique partial text) to search for.
+        tag: The HTML tag of the element (e.g., 'button', 'a', 'div').
+             Defaults to '*' to search any tag.
+    """
+    try:
+        # --- KEY CHANGE HERE ---
+        # Using contains(., '...') instead of contains(text(), '...').
+        # The dot '.' refers to the string value of the element and all its descendants,
+        # making it much more powerful for complex elements.
+        xpath_selector = f"//{tag}[contains(., '{text}')]"
+
+        clickable_element = WebDriverWait(web_driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, xpath_selector))
+        )
+        clickable_element.click()
+        print(f"Successfully clicked on element containing text: '{text}'")
+
+    except Exception as e:
+        print(f"Error when trying to click element with text '{text}': {e}")
+
+
+def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
+    # __PROD_TITLE = im.IM_PRODUCT_LINK
+    url = "https://trade.itemmania.com/myroom/sell/sell_regist.html?strRelationType=regist"
+    __PROD_TITLE__ = "오필승코리아 핑핑아물러가라 ❎개인디바인❎#$$@$%교디바인"
+    edit_object = EditPrice(
+        min_quantity=67,
+        max_quantity=4427,
+        quantity_per_sell=1,
+        price=400
+    )
+    try:
+        web_driver.get(url)
+        click_element_by_text(web_driver, __PROD_TITLE__, "a")
+        # click to edit button
+        re_register_button_selector = "a[href*='re_reg.html']"
+        re_register_button = WebDriverWait(web_driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, re_register_button_selector))
+        )
+        # end click to edit button
+        re_register_button.click()
+        time.sleep(3)
+        input_to_field(web_driver, str(edit_object.min_quantity), "user_quantity_min")
+        input_to_field(web_driver, str(edit_object.max_quantity), "user_quantity_max")
+        input_to_field(web_driver, str(edit_object.quantity_per_sell), "user_division_unit")
+        input_to_field(web_driver, str(int(edit_object.price)), "user_division_price")
+        click_element_by_text(web_driver, "재등록", "button")
+        click_element_by_text(web_driver, "확인", "button")
+        return True
+    except TimeoutException:
+        print(f"Time out: {url}")
+        return False
+    except WebDriverException as e:
+        print(f"E WebDriver in {url}: {e}")
+        return False
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
+def main():
+    edit_obj = EditPrice(
+        min_quantity=67,
+        max_quantity=4427,
+        quantity_per_sell=1,
+        price=400
+    )
+    a = IM()
+    sd = create_selenium_driver()
+    do_change_price(sd, a, edit_obj)
+
+
+if __name__ == "__main__":
+    main()

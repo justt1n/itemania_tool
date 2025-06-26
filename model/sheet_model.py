@@ -292,14 +292,14 @@ class IM(BaseGSheetModel):
             print("No min price IM")
             return 0.0
 
-    def get_im_max_price(self) -> float:
+    def get_im_max_price(self) -> int:
         try:
             sheet_manager = StockManager(self.IM_ID_SHEET_MAX)
             cell_value = sheet_manager.get_cell_float_value(f"'{self.IM_SHEET_MAX}'!{self.IM_CELL_MAX}")
-            return float(cell_value)  # type: ignore
+            return int(cell_value)  # type: ignore
         except Exception as e:
             print("No max price IM")
-            return 999999.0
+            return 999999
 
     def get_im_stock(self) -> int:
         try:
