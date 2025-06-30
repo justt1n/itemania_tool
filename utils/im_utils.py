@@ -371,6 +371,35 @@ def click_element_by_text(web_driver: WebDriver, text: str, tag: str = '*'):
     except Exception as e:
         print(f"Error when trying to click element with text '{text}': {e}")
 
+
+def click_element_by_text_robust(web_driver: WebDriver, text: str, tag: str = '*'):
+    """
+    Finds and clicks an element robustly based on its text content,
+    including text within child elements.
+
+    Args:
+        web_driver: The Selenium WebDriver instance.
+        text: The visible text (or a unique partial text) to search for.
+        tag: The HTML tag of the element (e.g., 'button', 'a', 'div').
+             Defaults to '*' to search any tag.
+    """
+    try:
+        # --- KEY CHANGE HERE ---
+        # Using contains(., '...') instead of contains(text(), '...').
+        # The dot '.' refers to the string value of the element and all its descendants,
+        # making it much more powerful for complex elements.
+        xpath_selector = f"//{tag}[contains(., '{text}')]"
+
+        clickable_element = WebDriverWait(web_driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, xpath_selector))
+        )
+        clickable_element.click()
+        print(f"Successfully clicked on element containing text: '{text}'")
+
+    except Exception as e:
+        print(f"Error when trying to click element with text '{text}': {e}")
+
+
 def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
     try:
         ###LOGIN###
@@ -383,8 +412,10 @@ def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
         click_element_by_text(web_driver, "로그인", "button")
         handle_new_tab_popup(web_driver)
         # url = im.IM_PRODUCT_LINK
-        url = "https://trade.itemmania.com/myroom/sell/sell_re_reg.html?id=2025062600994756"
+        url = "https://trade.itemmania.com/myroom/sell/sell_regist.html?strRelationType=regist"
         web_driver.get(url)
+        click_element_by_text(web_driver,"오필승코리아 핑핑아물러가라 ❎개인디바인❎#$$@$%교디바인","a")
+        click_element_by_text(web_driver,"오필승코리아 핑핑아물러가라 ❎개인디바인❎#$$@$%교디바인","a")
         time.sleep(3)
         input_to_field(web_driver, str(edit_object.min_quantity), "user_quantity_min")
         input_to_field(web_driver, str(edit_object.max_quantity), "user_quantity_max")
