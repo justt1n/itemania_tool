@@ -401,6 +401,9 @@ def click_element_by_text_robust(web_driver: WebDriver, text: str, tag: str = '*
 
 
 def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
+    # __PROD_TITLE = im.IM_PRODUCT_LINK
+    url = "https://trade.itemmania.com/myroom/sell/sell_regist.html?strRelationType=regist"
+    __PROD_TITLE__ = "오필승코리아 핑핑아물러가라 ❎개인디바인❎#$$@$%교디바인"
     try:
         ###LOGIN###
         web_driver.get("https://trade.itemmania.com/")
@@ -412,10 +415,8 @@ def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
         click_element_by_text(web_driver, "로그인", "button")
         handle_new_tab_popup(web_driver)
         # url = im.IM_PRODUCT_LINK
-        url = "https://trade.itemmania.com/myroom/sell/sell_regist.html?strRelationType=regist"
         web_driver.get(url)
-        click_element_by_text(web_driver,"오필승코리아 핑핑아물러가라 ❎개인디바인❎#$$@$%교디바인","a")
-        click_element_by_text(web_driver,"오필승코리아 핑핑아물러가라 ❎개인디바인❎#$$@$%교디바인","a")
+        click_element_by_text(web_driver,__PROD_TITLE__,"a")
         time.sleep(3)
         input_to_field(web_driver, str(edit_object.min_quantity), "user_quantity_min")
         input_to_field(web_driver, str(edit_object.max_quantity), "user_quantity_max")
