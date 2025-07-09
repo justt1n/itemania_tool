@@ -401,9 +401,9 @@ def click_element_by_text_robust(web_driver: WebDriver, text: str, tag: str = '*
 
 
 def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
-    __PROD_TITLE = im.IM_PRODUCT_LINK
+    # __PROD_TITLE = im.IM_PRODUCT_LINK
     url = "https://trade.itemmania.com/myroom/sell/sell_regist.html?strRelationType=regist"
-    # __PROD_TITLE__ = "오필승코리아 핑핑아물러가라 ❎개인디바인❎#$$@$%교디바인"
+    __PROD_TITLE__ = "오필승코리아 핑핑아물러가라 ❎개인디바인❎#$$@$%교디바인"
     try:
         ###LOGIN###
         web_driver.get("https://trade.itemmania.com/")
@@ -416,7 +416,14 @@ def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
         handle_new_tab_popup(web_driver)
         # url = im.IM_PRODUCT_LINK
         web_driver.get(url)
-        click_element_by_text(web_driver,__PROD_TITLE__,"a")
+        click_element_by_text(web_driver, __PROD_TITLE__, "a")
+        # click to edit button
+        re_register_button_selector = "a[href*='re_reg.html']"
+        re_register_button = WebDriverWait(web_driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, re_register_button_selector))
+        )
+        #end click to edit button
+        re_register_button.click()
         time.sleep(3)
         input_to_field(web_driver, str(edit_object.min_quantity), "user_quantity_min")
         input_to_field(web_driver, str(edit_object.max_quantity), "user_quantity_max")
@@ -448,5 +455,5 @@ def main():
     do_change_price(sd, a , edit_obj)
 
 
-main()
-
+if __name__=="__main__":
+    main()
