@@ -14,15 +14,16 @@ from app.process import get_row_run_index
 from decorator.retry import retry
 from decorator.time_execution import time_execution
 from model.payload import Row
-# from utils.dd_utils import get_dd_min_price
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from utils.exceptions import PACrawlerError
 from utils.ggsheet import GSheet, Sheet
-from utils.im_utils import get_im_min_price
+from utils.im_utils import get_im_min_price, EditPrice, calc_min_quantity, do_change_price, login_first, \
+    create_selenium_driver
 from utils.logger import setup_logging
+from selenium.webdriver.chrome.webdriver import WebDriver
 
 ### SETUP ###
 load_dotenv("settings.env")
@@ -84,6 +85,7 @@ def load_settings_from_env() -> Settings:
 @retry(5, delay=15, exception=PACrawlerError)
 def process(
     gsheet: GSheet,
+    browser: WebDriver
 ):
     print("process")
     try:
@@ -104,7 +106,6 @@ def process(
         print(f"Error getting worksheet: {e}")
         return
     row_indexes = get_row_run_index(worksheet=worksheet)
-    sd = create_selenium_driver()
     for index in row_indexes:
         status = "NOT FOUND"
         print(f"Row: {index}")
@@ -118,10 +119,18 @@ def process(
         if not isinstance(row, Row):
             continue
         try:
-            min_price = get_im_min_price(sd, row.im)
+            min_price = get_im_min_price(browser, row.im)
             if min_price is None:
                 print("No item info")
             else:
+                edit_object = EditPrice(
+                    price=min_price.price,
+                    quantity_per_sell=row.im.IM_QUANTITY_GET_PRICE,
+                    min_quantity=calc_min_quantity(min_price.price, row.im),
+                    max_quantity=row.im.get_im_max_price()
+                )
+                print(edit_object)
+                do_change_price(browser, row.im, edit_object)
                 print(f"Min price: {min_price.price}")
                 print(f"Title: {min_price.title}")
                 status = "FOUND"
@@ -143,15 +152,15 @@ def process(
         print("Next row...")
 
 
-def create_selenium_driver():
-    options = Options()
-    options.add_argument("--headless")  # Run in headless mode
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    print("Creating Selenium driver...")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    print("Selenium driver created successfully.")
-    return driver
+# def create_selenium_driver():
+#     options = Options()
+#     options.add_argument("--headless")  # Run in headless mode
+#     options.add_argument("--no-sandbox")
+#     options.add_argument("--disable-dev-shm-usage")
+#     print("Creating Selenium driver...")
+#     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+#     print("Selenium driver created successfully.")
+#     return driver
 
 
 def write_to_log_cell(
@@ -178,9 +187,11 @@ def write_to_log_cell(
 if __name__ == "__main__":
     print("Starting...")
     gsheet = GSheet(constants.KEY_PATH)
+    sd = create_selenium_driver()
+    login_first(sd)
     while True:
         try:
-            process(gsheet)
+            process(gsheet, sd)
             try:
                 _time_sleep = float(os.getenv("TIME_SLEEP"))
             except Exception:

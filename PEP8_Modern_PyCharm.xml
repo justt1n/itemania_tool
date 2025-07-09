@@ -3,8 +3,8 @@
     Phiên bản v2: Cấu trúc lại để gom tất cả cài đặt Python vào một nơi,
     nhằm tăng tính tương thích với các phiên bản PyCharm khác nhau.
   -->
-  <option name="RIGHT_MARGIN" value="99" />
-  <option name="WRAP_WHEN_TYPING_REACHES_RIGHT_MARGIN" value="true" />
+  <option name="RIGHT_MARGIN" value="120" />
+  <option name="WRAP_WHEN_TYPING_REACHES_RIGHT_MARGIN" value="false" />
   
   <codeStyleSettings language="Python">
     <!-- Blank Lines -->
