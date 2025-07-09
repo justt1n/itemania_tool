@@ -5,16 +5,16 @@ from typing import Optional, List, Dict, Union
 
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
+from selenium import webdriver
 from selenium.common import WebDriverException, TimeoutException
 from selenium.webdriver import Keys
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium import webdriver
 
 from model.sheet_model import IM
 
@@ -53,6 +53,7 @@ def handle_new_tab_popup(web_driver: webdriver.Chrome):
         print("No new tab pop-up appeared.")
     except Exception as e:
         print(f"An error occurred while handling new tab: {e}")
+
 
 def create_selenium_driver():
     options = Options()
@@ -299,6 +300,30 @@ def get_im_min_price(sd: WebDriver, im: IM) -> Optional[PriceItem]:
         return None
 
 
+def login_first(web_driver: WebDriver):
+    try:
+        print("Login...")
+        ###LOGIN###
+        web_driver.maximize_window()
+        web_driver.get("https://trade.itemmania.com/portal/user/p_login_form.html?returnUrl=https%3A%2F%2Ftrade.itemmania.com%2F")
+        # click_element_by_text(web_driver, "로그인", "a")
+        handle_new_tab_popup(web_driver)
+        input_to_field(web_driver, "min720809", "user_id")
+        input_to_field(web_driver, "minphil1028@", "user_password")
+        click_element_by_text(web_driver, "로그인", "button")
+        handle_new_tab_popup(web_driver)
+        return True
+    except TimeoutException:
+        print(f"Time out when logging in.")
+        return False
+    except WebDriverException as e:
+        print(f"E WebDriver in: {e}")
+        return False
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
 def ceil_up(number: float, base: int):
     if base <= 0 and base % 10 != 0:
         raise ValueError("Base must be in [1,10,100,1000,...]")
@@ -404,17 +429,13 @@ def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
     # __PROD_TITLE = im.IM_PRODUCT_LINK
     url = "https://trade.itemmania.com/myroom/sell/sell_regist.html?strRelationType=regist"
     __PROD_TITLE__ = "오필승코리아 핑핑아물러가라 ❎개인디바인❎#$$@$%교디바인"
+    edit_object = EditPrice(
+        min_quantity=67,
+        max_quantity=4427,
+        quantity_per_sell=1,
+        price=400
+    )
     try:
-        ###LOGIN###
-        web_driver.get("https://trade.itemmania.com/")
-        web_driver.maximize_window()
-        click_element_by_text(web_driver, "로그인", "a")
-        handle_new_tab_popup(web_driver)
-        input_to_field(web_driver, "min720809", "user_id")
-        input_to_field(web_driver, "minphil1028@", "user_password")
-        click_element_by_text(web_driver, "로그인", "button")
-        handle_new_tab_popup(web_driver)
-        # url = im.IM_PRODUCT_LINK
         web_driver.get(url)
         click_element_by_text(web_driver, __PROD_TITLE__, "a")
         # click to edit button
@@ -422,7 +443,7 @@ def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
         re_register_button = WebDriverWait(web_driver, 10).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, re_register_button_selector))
         )
-        #end click to edit button
+        # end click to edit button
         re_register_button.click()
         time.sleep(3)
         input_to_field(web_driver, str(edit_object.min_quantity), "user_quantity_min")
@@ -452,8 +473,8 @@ def main():
     )
     a = IM()
     sd = create_selenium_driver()
-    do_change_price(sd, a , edit_obj)
+    do_change_price(sd, a, edit_obj)
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
