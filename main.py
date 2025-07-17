@@ -3,7 +3,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from dotenv import load_dotenv
 from gspread.exceptions import APIError
@@ -21,7 +21,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from utils.exceptions import PACrawlerError
 from utils.ggsheet import GSheet, Sheet
 from utils.im_utils import get_im_min_price, EditPrice, calc_min_quantity, do_change_price, login_first, \
-    create_selenium_driver, get_list_product
+    create_selenium_driver, get_list_product, PriceItem
 from utils.logger import setup_logging
 from selenium.webdriver.chrome.webdriver import WebDriver
 
@@ -120,7 +120,9 @@ def process(
             continue
         try:
             prod_list = get_list_product(browser, row.im)
-            min_price = get_im_min_price(prod_list, row.im)
+            min_price_sheet = row.im.get_im_min_price()
+            max_price_sheet = row.im.get_im_max_price()
+            min_price = get_im_min_price(prod_list, min_price_sheet, max_price_sheet)
             if min_price is None:
                 print("No item info")
             else:
@@ -131,12 +133,13 @@ def process(
                     max_quantity=row.im.get_im_max_price()
                 )
                 print(edit_object)
-                do_change_price(browser, row.im, edit_object)
+                # do_change_price(browser, row.im, edit_object)
                 print(f"Min price: {min_price.price}")
                 print(f"Title: {min_price.title}")
                 status = "FOUND"
-                write_to_log_cell(worksheet, index, min_price.price, log_type="price")
-                # write_to_log_cell(worksheet, index, min_price.title, log_type="title")
+                price_log_str = _create_log_price(edit_object, prod_list, min_price_sheet, max_price_sheet)
+                write_to_log_cell(worksheet, index, price_log_str, log_type="price")
+                # write_to_log_cell(worksheet, index, price_log_str, log_type="title")
             try:
                 _row_time_sleep = float(os.getenv("ROW_TIME_SLEEP"))
                 print(f"Sleeping for {_row_time_sleep} seconds")
@@ -183,8 +186,24 @@ def write_to_log_cell(
         print(f"Error writing to log cell: {e}")
 
 
-### MAIN ###
+def _create_log_price(min_price, prod_items: List[Dict[str, Any]], min_price_sheet, max_price_sheet):
+    log_header = f"""Cập nhật thành công lúc {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}, Price = {min_price.price} ; QUANTITY_PER_PRICE = {min_price.quantity_per_sell}
+    Stock min = {min_price.min_quantity}; Stock max = {min_price.max_quantity};
+    PriceMin = {min_price_sheet}, PriceMax = {max_price_sheet};
+    """
+    offers_title = "\nCác offer có giá thấp hơn: \n"
+    offer_details = ""
+    if not prod_items:
+        offer_details = "Không có offer nào thấp hơn."
+    else:
+        offer_lines = [
+            f"{index}/ <{item.get('trade_subject', 'N/A')}> price = {item.get('trade_money', 'N/A')};"
+            for index, item in enumerate(prod_items[:3], start=1)
+        ]
+        offer_details = "\n".join(offer_lines)
+    return log_header + offers_title + offer_details
 
+### MAIN ###
 if __name__ == "__main__":
     print("Starting...")
     gsheet = GSheet(constants.KEY_PATH)

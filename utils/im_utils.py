@@ -143,6 +143,7 @@ def get_list_product(sd: WebDriver, im: IM):
         items = extract_and_combine_trades(data)
         filter_items = filter_trades_by_subject(items, im)
         transformed_items = transform_trade_list(filter_items)
+        transformed_items.sort(key=lambda x: int(x.get('trade_money', 0)))
         return transformed_items
     except requests.RequestException as e:
         raise ValueError(f"Error fetching data from ItemMania: {e}")
@@ -153,12 +154,12 @@ def transform_trade_list(original_list: List[Dict[str, Any]]) -> List[Dict[str, 
         'seller_id',
         'trade_money',
         'ea_trade_money',
-        'trade_quantity'
+        'trade_quantity',
         'trade_subject',
-        'ea_range'
+        'ea_range',
         'max_quantity',
         'min_quantity',
-        'min_trade_money'
+        'min_trade_money',
         'seller_rank',
         'str_trade_kind',
         'trade_kind'
@@ -182,14 +183,21 @@ def extract_and_combine_trades(raw_data_dict: Dict[str, Any]) -> List[Dict[str, 
 
 def filter_trades_by_subject(trade_list: List[Dict[str, Any]], im: IM) -> List[Dict[str, Any]]:
     filtered_list = []
-    excl = im.IM_EXCLUDE_KEYWORD or ''
-    incl = im.IM_INCLUDE_KEYWORD or ''
+
+    excl_str = im.IM_EXCLUDE_KEYWORD or ''
+    incl_str = im.IM_INCLUDE_KEYWORD or ''
+
+    incl_keywords = [keyword.strip() for keyword in incl_str.split(',') if keyword.strip()]
+    excl_keywords = [keyword.strip() for keyword in excl_str.split(',') if keyword.strip()]
+
     for item in trade_list:
         subject = item.get('trade_subject', '')
 
-        if excl != '' and not any(keyword in subject for keyword in excl):
-            filtered_list.append(item)
-        if incl != '' and any(keyword in subject for keyword in incl):
+        include_match = not incl_keywords or any(keyword in subject for keyword in incl_keywords)
+
+        exclude_match = excl_keywords and any(keyword in subject for keyword in excl_keywords)
+
+        if include_match and not exclude_match:
             filtered_list.append(item)
 
     return filtered_list
@@ -229,18 +237,27 @@ def build_common_search_cookie_from_url(url: str) -> str:
     return encoded
 
 
-def get_im_min_price(list_product: Dict, im: IM) -> Optional[PriceItem]:
+def get_im_min_price(list_product: Dict, min_price_sheet, max_price_sheet) -> Optional[PriceItem]:
     try:
         if not list_product:
             print("No product found in the list.")
             return None
-        min_price_sheet = im.get_im_min_price()
-        max_price_sheet = im.get_im_max_price()
         filtered_list = []
         for item in list_product:
             _item_price = int(item.get('trade_money', '0'))
-            _item_quantity = int(item.get('trade_quantity', '1'))
-            _price = _item_price / _item_quantity
+            try:
+                trade_quantity = item.get('trade_quantity', '0')
+                if trade_quantity is None:
+                    trade_quantity = '0'  # Default to '0' if None
+                _item_quantity = int(trade_quantity)
+                if _item_quantity <= 0:
+                    raise ValueError("Quantity is zero or negative.")
+            except ValueError:
+                print(
+                    f"Invalid quantity for item {item.get('trade_subject', 'Unknown')}: {trade_quantity}, defaulting to 1")
+                _item_quantity = 1
+            # _price = _item_price / _item_quantity
+            _price = _item_price
             if min_price_sheet <= _price <= max_price_sheet:
                 filtered_list.append(
                     PriceItem(
