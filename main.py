@@ -21,7 +21,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from utils.exceptions import PACrawlerError
 from utils.ggsheet import GSheet, Sheet
 from utils.im_utils import get_im_min_price, EditPrice, calc_min_quantity, do_change_price, login_first, \
-    create_selenium_driver
+    create_selenium_driver, get_list_product
 from utils.logger import setup_logging
 from selenium.webdriver.chrome.webdriver import WebDriver
 
@@ -119,7 +119,8 @@ def process(
         if not isinstance(row, Row):
             continue
         try:
-            min_price = get_im_min_price(browser, row.im)
+            prod_list = get_list_product(browser, row.im)
+            min_price = get_im_min_price(prod_list, row.im)
             if min_price is None:
                 print("No item info")
             else:

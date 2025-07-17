@@ -1,15 +1,14 @@
-import base64
 import math
 import os
+import re
 import time
-from typing import Optional, List, Dict, Union, Any
-from urllib.parse import parse_qs, urlparse, unquote
+from typing import Optional, List, Dict, Union
 
-import phpserialize
-import requests
+from bs4 import BeautifulSoup
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.common import WebDriverException, TimeoutException
+from selenium.webdriver import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.webdriver import WebDriver
@@ -88,174 +87,214 @@ class PriceItem(BaseModel):
         arbitrary_types_allowed = True
 
 
-def get_list_product(sd: WebDriver, im: IM):
+def _extract_quantity_from_text(text: str) -> Optional[QuantityItem]:
+    if not text:
+        return None
+    s = text.strip()
+    s = s.split("~")
+    if len(s) == 1:
+        quantity = _parse_korean_number_string(s[0].strip())
+        return QuantityItem(
+            min=quantity,
+            max=quantity
+        )
+    elif len(s) == 2:
+        _min = _parse_korean_number_string(s[0].strip())
+        _max = _parse_korean_number_string(s[1].strip())
+        return QuantityItem(
+            min=_min,
+            max=_max
+        )
+    else:
+        print(f"Error: Wrong format for quantity string: {text}")
+        return None
+
+
+def get_page_source_by_url_by_selenium(sd: WebDriver, url: str, im: IM) -> Optional[str]:
+    print(f"Đang điều hướng tới URL: {url}")
+    try:
+        sd.get(url)
+
+        try:
+            search_box = WebDriverWait(sd, 10).until(
+                EC.element_to_be_clickable((By.ID, "word"))
+            )
+
+            search_box.clear()  # Clear any default text
+            search_box.send_keys(im.IM_INCLUDE_KEYWORD)  # Type your desired search term
+
+            search_box.send_keys(Keys.RETURN)  # Simulate pressing the Enter key
+
+            time.sleep(2)
+
+        except Exception as e:
+            print(f"Đã xảy ra lỗi: {e}")
+
+        WebDriverWait(sd, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'ul.search_list_premium > li, ul.search_list_normal > li'))
+        )
+
+        return sd.page_source
+
+    except TimeoutException:
+        print(f"Time out: {url}")
+        return None
+    except WebDriverException as e:
+        print(f"E WebDriver in {url}: {e}")
+        return None
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+
+
+# --- HÀM LÕI MỚI ---
+def _parse_korean_number_string(s: str) -> Optional[int]:
+    """
+    bao gồm các đơn vị '조' (nghìn tỷ), '억' (trăm triệu), '만' (chục nghìn).
+    Ví dụ: '99조9,999억' -> 99999900000000
+    """
+    if not s:
+        return None
+
+    s = s.replace(',', '').strip()
+
+    units = {'조': 10 ** 12, '억': 10 ** 8, '만': 10 ** 4}
+    total_value = 0
+    current_number_str = ""
+
+    for char in s:
+        if char.isdigit() or char == '.':
+            current_number_str += char
+        elif char in units:
+            if not current_number_str:
+                current_number_str = "1"  # Xử lý trường hợp "만" -> 1만
+            total_value += float(current_number_str) * units[char]
+            current_number_str = ""
+        # Bỏ qua các ký tự khác như '개'
+
+    # Cộng phần số còn lại (nếu có)
+    if current_number_str:
+        total_value += float(current_number_str)
+
+    return int(total_value) if total_value > 0 else None
+
+
+def _parse_unit_price(price_str: str) -> Optional[float]:
+    if not price_str:
+        return None
+
+    # Nó sẽ tìm con số ngắn nhất có thể đứng trước chữ '원'
+    # Điều này giải quyết vấn đề chuỗi bị dính liền '...원최소...'
+    match = re.search(r'([^당]+)당\s*([\d,]+?)\s*원', price_str)
+
+    if match:
+        try:
+            unit_block_str = match.group(1)
+            price_for_block_str = match.group(2)
+
+            # Hàm _parse_korean_number_string bạn đã có
+            unit_block_size = _parse_korean_number_string(unit_block_str)
+            price_for_block = float(price_for_block_str.replace(',', ''))
+
+            if unit_block_size and unit_block_size > 0:
+                true_unit_price = price_for_block / unit_block_size
+                return true_unit_price
+        except Exception as e:
+            print(f"Error while parsing unit price from '{price_str}': {e}")
+            return None
+    else:
+        return _parse_korean_number_string(price_str)
+
+
+def get_im_min_price_in_source(page_source: str, im: IM, min_price_sheet, max_price_sheet) -> Optional[PriceItem]:
+    """
+    Phân tích page source HTML từ itemmania, trích xuất tất cả sản phẩm từ
+    cả list NORMAL và PREMIUM, và trả về sản phẩm có giá thấp nhất.
+    """
+    if not page_source:
+        print("Warning: page_source trống, không thể phân tích.")
+        return None
+
+    soup = BeautifulSoup(page_source, 'html.parser')
+    all_items: List[PriceItem] = []
+    # Selector này lấy TẤT CẢ các thẻ <li> từ cả hai danh sách premium và normal trong một lần.
+    # Dấu phẩy (,) hoạt động như một toán tử "OR".
+    product_rows = soup.select('ul.search_list_premium > li, ul.search_list_normal > li')
+
+    print(f"Tìm thấy tổng cộng {len(product_rows)} dòng sản phẩm tiềm năng từ tất cả các danh sách.")
+
+    for row in product_rows:
+        # Bỏ qua dòng tiêu đề (header)
+        if 'list_head' in row.get('class', []):
+            continue
+
+        try:
+            title_element = row.select_one('a.subject')
+            quantity_element = row.select_one('div.col.quantity')
+            price_element = row.select_one('div.col.price')
+            info_element = row.select_one('div.col.info')
+
+            title = title_element.get_text(strip=True) if title_element else "N/A"
+            info = info_element.get_text(separator=' ', strip=True) if info_element else "N/A"
+
+            quantity_raw = quantity_element.get_text(strip=True) if quantity_element else None
+            price_raw = price_element.get_text(strip=True) if price_element else None
+
+            quantity = _extract_quantity_from_text(quantity_raw)
+            price = _parse_unit_price(price_raw)
+
+            if price is not None and quantity is not None:
+                if price < min_price_sheet:
+                    continue
+                if price > max_price_sheet:
+                    continue
+                all_items.append(
+                    PriceItem(
+                        title=title,
+                        min_quantity=quantity.min,
+                        max_quantity=quantity.max,
+                        price=price,
+                        info=info
+                    )
+                )
+        except Exception as e:
+            print(f"Warning: ignore 1 line by error: {e}")
+            continue
+
+    if not all_items:
+        print("Warning: Can not get any item from source.")
+        return None
+
+    if im.IM_INCLUDE_KEYWORD:
+        all_items = [item for item in all_items if im.IM_INCLUDE_KEYWORD.lower() in item.title.lower()]
+    if im.IM_EXCLUDE_KEYWORD:
+        all_items = [item for item in all_items if im.IM_EXCLUDE_KEYWORD.lower() not in item.title.lower()]
+
+    try:
+        min_price_item = min(all_items, key=lambda item: item.price)
+        print(f"Success: Get {len(all_items)} items. Min price is {min_price_item.price:,.2f}")
+        return min_price_item
+    except (ValueError, TypeError):
+        print("Error: Cant get min price from source.")
+        return None
+
+
+def get_im_min_price(sd: WebDriver, im: IM) -> Optional[PriceItem]:
+    """Get the minimum price from the IM page."""
     try:
         url = im.IM_PRODUCT_COMPARE
-        cookies = sd.get_cookies()
-        session_cookies = {cookie['name']: cookie['value'] for cookie in cookies}
-        session_cookies['common_search'] = build_common_search_cookie_from_url(url)
-        parsed_url = urlparse(url)
-        query_params = parse_qs(parsed_url.query)
-
-        game_code = query_params.get('search_game', [''])[0]
-        server_code = query_params.get('search_server', [''])[0]
-        search_goods = query_params.get('search_goods', ['all'])[0]
-
-        headers = {
-            'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
-            'Connection': 'keep-alive',
-            'Origin': 'https://www.itemmania.com',
-            'Referer': url,
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                          'Chrome/135.0.0.0 Safari/537.36',
-            'X-REQUESTED-WITH': 'XMLHttpRequest',
-            'sec-ch-ua': '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Linux"'
-        }
-
-        data = {
-            'game_code': game_code,
-            'server_code': server_code,
-            'search_goods': search_goods,
-            'goods_type': '1',
-            'trade_state': '1',
-            'credit_type': '1',
-            'pinit': '1',
-        }
-    except Exception as e:
-        raise ValueError(f"Error parsing URL: {e}")
-
-    try:
-        response = requests.post(
-            'https://www.itemmania.com/sell/ajax_list_search.php',
-            headers=headers,
-            cookies=session_cookies,
-            data=data,
-            verify=False
-        )
-        response.raise_for_status()
-        data = response.json()
-        items = extract_and_combine_trades(data)
-        filter_items = filter_trades_by_subject(items, im)
-        transformed_items = transform_trade_list(filter_items)
-        return transformed_items
-    except requests.RequestException as e:
-        raise ValueError(f"Error fetching data from ItemMania: {e}")
-
-
-def transform_trade_list(original_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    keys_to_keep = {
-        'seller_id',
-        'trade_money',
-        'ea_trade_money',
-        'trade_quantity'
-        'trade_subject',
-        'ea_range'
-        'max_quantity',
-        'min_quantity',
-        'min_trade_money'
-        'seller_rank',
-        'str_trade_kind',
-        'trade_kind'
-    }
-
-    return [{key: item.get(key) for key in keys_to_keep} for item in original_list]
-
-
-def extract_and_combine_trades(raw_data_dict: Dict[str, Any]) -> List[Dict[str, Any]]:
-    data = raw_data_dict.get('data', {})
-
-    g_list = data.get('g', [])
-    p_list = data.get('p', [])
-    power_data = data.get('power', {})
-    power_list = list(power_data.values())
-
-    combined_list = g_list + p_list + power_list
-
-    return combined_list
-
-
-def filter_trades_by_subject(trade_list: List[Dict[str, Any]], im: IM) -> List[Dict[str, Any]]:
-    filtered_list = []
-    excl = im.IM_EXCLUDE_KEYWORD or ''
-    incl = im.IM_INCLUDE_KEYWORD or ''
-    for item in trade_list:
-        subject = item.get('trade_subject', '')
-
-        if excl != '' and not any(keyword in subject for keyword in excl):
-            filtered_list.append(item)
-        if incl != '' and any(keyword in subject for keyword in incl):
-            filtered_list.append(item)
-
-    return filtered_list
-
-
-def build_common_search_cookie_from_url(url: str) -> str:
-    parsed_url = urlparse(url)
-    query = parse_qs(parsed_url.query)
-
-    # Extract values
-    game_code = query.get('search_game', [''])[0]
-    server_code = query.get('search_server', [''])[0]
-    game_name = unquote(query.get('search_game_text', [''])[0])
-    server_name = unquote(query.get('search_server_text', [''])[0])
-    search_goods = query.get('search_goods', ['all'])[0]
-    search_word = game_name
-    referer = 'ajax_list_search.php'
-
-    # Build PHP-like dict
-    data = {
-        b'game_code': game_code.encode(),
-        b'server_code': server_code.encode(),
-        b'game_name': game_name.encode('utf-8'),
-        b'server_name': server_name.encode('utf-8'),
-        b'search_goods': search_goods.encode(),
-        b'search_order': search_word.encode('utf-8'),
-        b'trade_state': b'1',
-        b'credit_type': b'1',
-        b'goods_type': b'1',
-        b'search_referer': referer.encode(),
-        b'reg_time': b'1',
-    }
-
-    serialized = phpserialize.dumps(data)
-    encoded = base64.b64encode(serialized).decode()
-
-    return encoded
-
-
-def get_im_min_price(list_product: Dict, im: IM) -> Optional[PriceItem]:
-    try:
-        if not list_product:
-            print("No product found in the list.")
+        if not url:
+            print("Empty link")
+            return None
+        page_source = get_page_source_by_url_by_selenium(sd, url, im)
+        if not page_source:
+            print("Cant get page source.")
             return None
         min_price_sheet = im.get_im_min_price()
         max_price_sheet = im.get_im_max_price()
-        filtered_list = []
-        for item in list_product:
-            _item_price = int(item.get('trade_money', '0'))
-            _item_quantity = int(item.get('trade_quantity', '1'))
-            _price = _item_price / _item_quantity
-            if min_price_sheet <= _price <= max_price_sheet:
-                filtered_list.append(
-                    PriceItem(
-                        title=item.get('trade_subject', ''),
-                        min_quantity=item.get('min_quantity', 1),
-                        max_quantity=item.get('max_quantity', 99999),
-                        price=_price,
-                        info=item.get('seller_id', 'cant get seller id')
-                    )
-                )
-        if not filtered_list:
-            print("No items found within the specified price range.")
-            return None
-        min_price_item = min(filtered_list, key=lambda x: x.price)
-        return min_price_item
+        min_price = get_im_min_price_in_source(page_source, im, min_price_sheet, max_price_sheet)
+
+        return min_price
 
     except Exception as e:
         print(f"Error when get min price: {e}")
@@ -267,15 +306,13 @@ def login_first(web_driver: WebDriver):
         print("Login...")
         ###LOGIN###
         web_driver.maximize_window()
-        web_driver.get(
-            "https://trade.itemmania.com/portal/user/p_login_form.html?returnUrl=https%3A%2F%2Ftrade.itemmania.com%2F")
+        web_driver.get("https://trade.itemmania.com/portal/user/p_login_form.html?returnUrl=https%3A%2F%2Ftrade.itemmania.com%2F")
         # click_element_by_text(web_driver, "로그인", "a")
         handle_new_tab_popup(web_driver)
         input_to_field(web_driver, os.getenv("IM_USERNAME"), "user_id")
         input_to_field(web_driver, os.getenv("IM_PASSWORD"), "user_password")
         click_element_by_text(web_driver, "로그인", "button")
         handle_new_tab_popup(web_driver)
-        web_driver.minimize_window()
         return True
     except TimeoutException:
         print(f"Time out when logging in.")
