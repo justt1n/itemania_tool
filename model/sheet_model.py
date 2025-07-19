@@ -265,23 +265,25 @@ class ExtraInfor(BaseGSheetModel):
 class IM(BaseGSheetModel):
     IM_CHECK: Annotated[int | None, "B"] = 0
     IM_PRODUCT_LINK: Annotated[str | None, "F"] = 0
-    IM_PRODUCT_COMPARE: Annotated[str | None, "G"] = 0
-    IM_INCLUDE_KEYWORD: Annotated[str | None, "H"] = ''
-    IM_EXCLUDE_KEYWORD: Annotated[str | None, "I"] = ''
-    IM_DONGIA_GIAM_MIN: Annotated[float | None, "J"] = 0
-    IM_IS_UPDATE_ORDER_MIN: Annotated[int | None, "K"] = 0
-    IM_TOTAL_ORDER_MIN: Annotated[int | None, "L"] = 0
-    IM_HE_SO_LAM_TRON: Annotated[int | None, "M"] = 0
-    IM_QUANTITY_GET_PRICE: Annotated[int | None, "N"] = 0
-    IM_ID_SHEET_MIN: Annotated[str | None, "O"] = ''
-    IM_SHEET_MIN: Annotated[str | None, "P"] = ''
-    IM_CELL_MIN: Annotated[str | None, "Q"] = ''
-    IM_ID_SHEET_MAX: Annotated[str | None, "R"] = ''
-    IM_SHEET_MAX: Annotated[str | None, "S"] = ''
-    IM_CELL_MAX: Annotated[str | None, "T"] = ''
-    IM_ID_SHEET_STOCK: Annotated[str | None, "U"] = ''
-    IM_SHEET_STOCK: Annotated[str | None, "V"] = ''
-    IM_CELL_STOCK: Annotated[str | None, "W"] = ''
+    IM_COMPARE_ALL: Annotated[int | None, "G"] = 0
+    IM_PRODUCT_COMPARE: Annotated[str | None, "H"] = 0
+    IM_INCLUDE_KEYWORD: Annotated[str | None, "I"] = ''
+    IM_EXCLUDE_KEYWORD: Annotated[str | None, "J"] = ''
+    IM_DONGIA_GIAM_MIN: Annotated[float | None, "K"] = 0
+    IM_IS_UPDATE_ORDER_MIN: Annotated[int | None, "L"] = 0
+    IM_TOTAL_ORDER_MIN: Annotated[int | None, "M"] = 0
+    IM_HE_SO_LAM_TRON: Annotated[int | None, "N"] = 0
+    IM_QUANTITY_GET_PRICE: Annotated[int | None, "O"] = 0
+    IM_ID_SHEET_MIN: Annotated[str | None, "P"] = ''
+    IM_SHEET_MIN: Annotated[str | None, "Q"] = ''
+    IM_CELL_MIN: Annotated[str | None, "R"] = ''
+    IM_ID_SHEET_MAX: Annotated[str | None, "S"] = ''
+    IM_SHEET_MAX: Annotated[str | None, "T"] = ''
+    IM_CELL_MAX: Annotated[str | None, "U"] = ''
+    IM_ID_SHEET_STOCK: Annotated[str | None, "V"] = ''
+    IM_SHEET_STOCK: Annotated[str | None, "W"] = ''
+    IM_CELL_STOCK: Annotated[str | None, "X"] = ''
+    IM_MINUPDATESTOCK: Annotated[int | None, "Y"] = 0
 
     def get_im_min_price(self) -> float:
         try:
