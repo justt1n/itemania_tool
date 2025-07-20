@@ -20,7 +20,7 @@ from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from utils.exceptions import PACrawlerError
 from utils.ggsheet import GSheet, Sheet
-from utils.im_utils import get_im_min_price, EditPrice, calc_min_quantity, do_change_price, login_first, \
+from utils.im_utils import get_im_min_price, EditPrice, calc_min_quantity, process_change_price, login_first, \
     create_selenium_driver, get_list_product, PriceItem
 from utils.logger import setup_logging
 from selenium.webdriver.chrome.webdriver import WebDriver
@@ -134,7 +134,7 @@ def process(
                     max_quantity=row.im.get_im_max_price()
                 )
                 print(edit_object)
-                # do_change_price(browser, row.im, edit_object) # chinh gia bang ham nay
+                process_change_price(browser, row.im, edit_object)
                 print(f"Min price: {min_price.price}")
                 print(f"Title: {min_price.title}")
                 status = "FOUND"
