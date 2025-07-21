@@ -123,7 +123,6 @@ def process(
             min_price_sheet = row.im.get_im_min_price()
             max_price_sheet = row.im.get_im_max_price()
             min_price = get_im_min_price(prod_list, min_price_sheet, max_price_sheet)
-            # final_price = calculate_final_price(min_price, row.im) #Viet them ham nay de tinh toan gia cuoi cung
             if min_price is None:
                 print("No item info")
             else:
@@ -134,7 +133,7 @@ def process(
                     max_quantity=row.im.get_im_max_price()
                 )
                 print(edit_object)
-                # do_change_price(browser, row.im, edit_object) # chinh gia bang ham nay
+                # do_change_price(browser, row.im, edit_object)
                 print(f"Min price: {min_price.price}")
                 print(f"Title: {min_price.title}")
                 status = "FOUND"
