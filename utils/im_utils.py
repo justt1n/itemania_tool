@@ -408,7 +408,6 @@ def click_element_by_text_robust(web_driver: WebDriver, text: str, tag: str = '*
 
 def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
     # __PROD_TITLE = im.IM_PRODUCT_LINK
-    #can phai detect url bang bang title cua san pham, day la url set tam
     url = "https://trade.itemmania.com/myroom/sell/sell_regist.html?strRelationType=regist"
     __PROD_TITLE__ = "오필승코리아 핑핑아물러가라 ❎개인디바인❎#$$@$%교디바인"
     edit_object = EditPrice(
