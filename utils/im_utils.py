@@ -141,7 +141,7 @@ def get_list_product(sd: WebDriver, im: IM):
         )
         response.raise_for_status()
         data = response.json()
-        items = extract_and_combine_trades(data)
+        items = extract_and_combine_trades(data, mode=im.IM_COMPARE_ALL)
         filter_items = filter_trades_by_subject(items, im)
         transformed_items = transform_trade_list(filter_items)
         transformed_items.sort(key=lambda x: int(x.get('trade_money', 0)))
@@ -169,16 +169,22 @@ def transform_trade_list(original_list: List[Dict[str, Any]]) -> List[Dict[str, 
     return [{key: item.get(key) for key in keys_to_keep} for item in original_list]
 
 
-def extract_and_combine_trades(raw_data_dict: Dict[str, Any]) -> List[Dict[str, Any]]:
+def extract_and_combine_trades(raw_data_dict: Dict[str, Any], mode) -> List[Dict[str, Any]]:
+    if mode == None:
+        mode = 1
+
     data = raw_data_dict.get('data', {})
 
     g_list = data.get('g', [])
     p_list = data.get('p', [])
     power_data = data.get('power', {})
     power_list = list(power_data.values())
-
-    combined_list = g_list + p_list + power_list
-
+    if mode == 1:
+        # Combine 'g', 'p', and 'power' lists into one
+        combined_list = g_list + p_list + power_list
+    else:
+        # Combine 'g' and 'p' lists only
+        combined_list = g_list + p_list
     return combined_list
 
 
