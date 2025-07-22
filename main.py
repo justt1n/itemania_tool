@@ -144,7 +144,7 @@ def process(
             price_log_str = _create_log_price(edit_object, prod_list, min_price_sheet, max_price_sheet)
             write_to_log_cell(worksheet, index, price_log_str, log_type="price")
             try:
-                _row_time_sleep = float(os.getenv("ROW_TIME_SLEEP"))
+                _row_time_sleep = float(os.getenv("SLEEP_TIME_EACH_ROUND"))
                 print(f"Sleeping for {_row_time_sleep} seconds")
                 time.sleep(_row_time_sleep)
             except Exception as e:
@@ -239,10 +239,10 @@ if __name__ == "__main__":
         try:
             process(gsheet, sd)
             try:
-                _time_sleep = float(os.getenv("TIME_SLEEP"))
+                _time_sleep = float(os.getenv("SLEEP_TIME"))
             except Exception:
                 _time_sleep = 0
-            print(f"Sleeping for {_time_sleep} seconds")
+            print(f"Finished processing, sleeping for {_time_sleep} seconds")
             time.sleep(_time_sleep)
         except Exception as e:
             _str_error = f"Error: {e}"
