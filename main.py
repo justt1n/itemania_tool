@@ -8,22 +8,19 @@ from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 from gspread.exceptions import APIError
 from gspread.utils import a1_to_rowcol
+from selenium.webdriver.chrome.webdriver import WebDriver
 
 import constants
 from app.process import get_row_run_index
 from decorator.retry import retry
 from decorator.time_execution import time_execution
 from model.payload import Row
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
+from model.sheet_model import IM
 from utils.exceptions import PACrawlerError
 from utils.ggsheet import GSheet, Sheet
 from utils.im_utils import get_im_min_price, EditPrice, calc_min_quantity, process_change_price, login_first, \
-    create_selenium_driver, get_list_product, PriceItem
+    create_selenium_driver, get_list_product
 from utils.logger import setup_logging
-from selenium.webdriver.chrome.webdriver import WebDriver
 
 ### SETUP ###
 load_dotenv("settings.env")
@@ -107,7 +104,6 @@ def process(
         return
     row_indexes = get_row_run_index(worksheet=worksheet)
     for index in row_indexes:
-        status = "NOT FOUND"
         print(f"Row: {index}")
         try:
             row = Row.from_row_index(worksheet, index)
@@ -123,24 +119,30 @@ def process(
             min_price_sheet = row.im.get_im_min_price()
             max_price_sheet = row.im.get_im_max_price()
             min_price = get_im_min_price(prod_list, min_price_sheet, max_price_sheet)
-            # final_price = calculate_final_price(min_price, row.im) #Viet them ham nay de tinh toan gia cuoi cung
+            max_stock = row.im.get_im_stock()
             if min_price is None:
-                print("No item info")
-            else:
-                edit_object = EditPrice(
-                    price=min_price.price,
+                print("No offer in range, set to min")
+                min_price = EditPrice(
+                    price=min_price_sheet,
                     quantity_per_sell=row.im.IM_QUANTITY_GET_PRICE,
-                    min_quantity=calc_min_quantity(min_price.price, row.im),
-                    max_quantity=row.im.get_im_max_price()
+                    min_quantity=calc_min_quantity(min_price_sheet, row.im),
+                    max_quantity=max_stock
                 )
-                print(edit_object)
-                process_change_price(browser, row.im, edit_object)
-                print(f"Min price: {min_price.price}")
-                print(f"Title: {min_price.title}")
-                status = "FOUND"
-                price_log_str = _create_log_price(edit_object, prod_list, min_price_sheet, max_price_sheet)
-                write_to_log_cell(worksheet, index, price_log_str, log_type="price")
-                # write_to_log_cell(worksheet, index, price_log_str, log_type="title")
+                final_price = min_price.price
+            else:
+                final_price = calculate_final_price(min_price, row.im, min_price_sheet, max_price_sheet)
+
+            edit_object = EditPrice(
+                price=final_price * row.im.IM_QUANTITY_GET_PRICE,
+                quantity_per_sell=row.im.IM_QUANTITY_GET_PRICE,
+                min_quantity=calc_min_quantity(min_price.price, row.im),
+                max_quantity=max_stock
+            )
+            print(edit_object)
+            process_change_price(browser, row.im, edit_object)
+            print(f"Min price: {min_price.price}")
+            price_log_str = _create_log_price(edit_object, prod_list, min_price_sheet, max_price_sheet)
+            write_to_log_cell(worksheet, index, price_log_str, log_type="price")
             try:
                 _row_time_sleep = float(os.getenv("ROW_TIME_SLEEP"))
                 print(f"Sleeping for {_row_time_sleep} seconds")
@@ -167,6 +169,27 @@ def process(
 #     print("Selenium driver created successfully.")
 #     return driver
 
+def calculate_final_price(
+    min_price: EditPrice,
+    im: IM,
+    min: float,
+    max: float
+) -> float:
+    price_step = im.IM_DONGIA_GIAM_MIN
+
+    competitor_price = min_price.price
+
+    proposed_price = competitor_price - price_step
+
+    if proposed_price < min:
+        final_price = min
+    elif proposed_price > max:
+        final_price = max
+    else:
+        final_price = proposed_price
+
+    return final_price
+
 
 def write_to_log_cell(
     worksheet,
@@ -188,7 +211,8 @@ def write_to_log_cell(
 
 
 def _create_log_price(min_price, prod_items: List[Dict[str, Any]], min_price_sheet, max_price_sheet):
-    log_header = f"""Cập nhật thành công lúc {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}, Price = {min_price.price} ; QUANTITY_PER_PRICE = {min_price.quantity_per_sell}
+    log_header = f"""Cập nhật thành công lúc {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}, 
+    Price = {min_price.price} ; QUANTITY_PER_PRICE = {min_price.quantity_per_sell}
     Stock min = {min_price.min_quantity}; Stock max = {min_price.max_quantity};
     PriceMin = {min_price_sheet}, PriceMax = {max_price_sheet};
     """
@@ -203,6 +227,7 @@ def _create_log_price(min_price, prod_items: List[Dict[str, Any]], min_price_she
         ]
         offer_details = "\n".join(offer_lines)
     return log_header + offers_title + offer_details
+
 
 ### MAIN ###
 if __name__ == "__main__":

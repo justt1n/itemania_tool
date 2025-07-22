@@ -323,12 +323,12 @@ class EditPrice(BaseModel):
 
 
 def calc_min_quantity(price, im: IM) -> int:
+    if price > im.IM_TOTAL_ORDER_MIN:
+        return 1
     if im.IM_IS_UPDATE_ORDER_MIN:
-        tmp_min_quantity = ceil_up(im.IM_TOTAL_ORDER_MIN / price / im.IM_QUANTITY_GET_PRICE, im.IM_HE_SO_LAM_TRON)
+        tmp_min_quantity = ceil_up(im.IM_TOTAL_ORDER_MIN / price, im.IM_HE_SO_LAM_TRON)
     else:
-        if im.IM_TOTAL_ORDER_MIN < price:
-            return 1
-        tmp_min_quantity = math.ceil(im.IM_TOTAL_ORDER_MIN / price / im.IM_QUANTITY_GET_PRICE)
+        tmp_min_quantity = math.ceil(im.IM_TOTAL_ORDER_MIN / price)
     return tmp_min_quantity
 
 
@@ -469,6 +469,14 @@ def do_change_price(web_driver: WebDriver, edit_object: EditPrice, product_id: s
         input_to_field(web_driver, str(int(edit_object.price)), "user_division_price")
         click_element_by_text(web_driver, "재등록", "button")
         click_element_by_text(web_driver, "확인", "button")
+        # close alert pop up
+        try:
+            WebDriverWait(web_driver, 10).until(EC.alert_is_present())
+            alert = web_driver.switch_to.alert
+            alert.accept()
+            print("Alert accepted successfully.")
+        except TimeoutException:
+            print("No alert found, continuing...")
         return True
     except TimeoutException:
         print(f"Time out: {url}")
