@@ -2,6 +2,7 @@ import base64
 import math
 import os
 import time
+import re
 from typing import Optional, List, Dict, Union, Any
 from urllib.parse import parse_qs, urlparse, unquote
 
@@ -140,7 +141,7 @@ def get_list_product(sd: WebDriver, im: IM):
         )
         response.raise_for_status()
         data = response.json()
-        items = extract_and_combine_trades(data)
+        items = extract_and_combine_trades(data, mode=im.IM_COMPARE_ALL)
         filter_items = filter_trades_by_subject(items, im)
         transformed_items = transform_trade_list(filter_items)
         transformed_items.sort(key=lambda x: int(x.get('trade_money', 0)))
@@ -168,16 +169,22 @@ def transform_trade_list(original_list: List[Dict[str, Any]]) -> List[Dict[str, 
     return [{key: item.get(key) for key in keys_to_keep} for item in original_list]
 
 
-def extract_and_combine_trades(raw_data_dict: Dict[str, Any]) -> List[Dict[str, Any]]:
+def extract_and_combine_trades(raw_data_dict: Dict[str, Any], mode) -> List[Dict[str, Any]]:
+    if mode == None:
+        mode = 1
+
     data = raw_data_dict.get('data', {})
 
     g_list = data.get('g', [])
     p_list = data.get('p', [])
     power_data = data.get('power', {})
     power_list = list(power_data.values())
-
-    combined_list = g_list + p_list + power_list
-
+    if mode == 1:
+        # Combine 'g', 'p', and 'power' lists into one
+        combined_list = g_list + p_list + power_list
+    else:
+        # Combine 'g' and 'p' lists only
+        combined_list = g_list + p_list
     return combined_list
 
 
@@ -322,12 +329,12 @@ class EditPrice(BaseModel):
 
 
 def calc_min_quantity(price, im: IM) -> int:
+    if price > im.IM_TOTAL_ORDER_MIN:
+        return 1
     if im.IM_IS_UPDATE_ORDER_MIN:
-        tmp_min_quantity = ceil_up(im.IM_TOTAL_ORDER_MIN / price / im.IM_QUANTITY_GET_PRICE, im.IM_HE_SO_LAM_TRON)
+        tmp_min_quantity = ceil_up(im.IM_TOTAL_ORDER_MIN / price, im.IM_HE_SO_LAM_TRON)
     else:
-        if im.IM_TOTAL_ORDER_MIN < price:
-            return 1
-        tmp_min_quantity = math.ceil(im.IM_TOTAL_ORDER_MIN / price / im.IM_QUANTITY_GET_PRICE)
+        tmp_min_quantity = math.ceil(im.IM_TOTAL_ORDER_MIN / price)
     return tmp_min_quantity
 
 
@@ -405,28 +412,62 @@ def click_element_by_text_robust(web_driver: WebDriver, text: str, tag: str = '*
     except Exception as e:
         print(f"Error when trying to click element with text '{text}': {e}")
 
+def find_product_id_from_all_page(web_driver: WebDriver, im: IM):
+    page = 1
+    while True:
+        try:
+            url = f"https://trade.itemmania.com/myroom/sell/sell_regist.html?page={page}&strRelationType=regist"
+            web_driver.get(url)
+            time.sleep(3)
+            # Check record number in table tb_list
+            rows = web_driver.find_elements(By.CSS_SELECTOR, "table.tb_list tr")
+            if len(rows) <= 1:  # chỉ còn header
+                print("No more records in list.")
+                break
+            product_id = find_product_id_to_change_price(web_driver, im)
+            if product_id:
+                return product_id
+            page += 1
+        except Exception as e:
+            print(f"Error when trying to get page: {e}")
+            return None
+    return None
 
-def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
-    # __PROD_TITLE = im.IM_PRODUCT_LINK
-    #can phai detect url bang bang title cua san pham, day la url set tam
-    url = "https://trade.itemmania.com/myroom/sell/sell_regist.html?strRelationType=regist"
-    __PROD_TITLE__ = "오필승코리아 핑핑아물러가라 ❎개인디바인❎#$$@$%교디바인"
-    edit_object = EditPrice(
-        min_quantity=67,
-        max_quantity=4427,
-        quantity_per_sell=1,
-        price=400
-    )
+def find_product_id_to_change_price(web_driver: WebDriver, im: IM):
+    try:
+        print(f"Find product id by title: {im.IM_PRODUCT_LINK}")
+        xpath_selector = f"//a[contains(text(), '{im.IM_PRODUCT_LINK}')]"
+        clickable_element = WebDriverWait(web_driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, xpath_selector))
+        )
+        href = clickable_element.get_attribute("href")
+        if not href:
+            print("href attribute is None")
+            return None
+        match = re.search(r"id=(\d+)", href)
+        if not match:
+            print(f"id not found in href: {href}")
+            return None
+
+        if not _verify_to_update(clickable_element, im):
+            return None
+
+        return match.group(1)
+    except Exception as e:
+        print(f"Error when trying to find product id: {e}")
+        return None
+
+def process_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
+    product_id = find_product_id_from_all_page(web_driver, im)
+    if product_id is None:
+        print("No product id found")
+        return False
+    do_change_price(web_driver, edit_object, product_id)
+
+def do_change_price(web_driver: WebDriver, edit_object: EditPrice, product_id: str):
+    url = f"https://trade.itemmania.com/myroom/sell/sell_re_reg.html?id={product_id}"
     try:
         web_driver.get(url)
-        click_element_by_text(web_driver, __PROD_TITLE__, "a")
-        # click to edit button
-        re_register_button_selector = "a[href*='re_reg.html']"
-        re_register_button = WebDriverWait(web_driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, re_register_button_selector))
-        )
-        # end click to edit button
-        re_register_button.click()
         time.sleep(3)
         input_to_field(web_driver, str(edit_object.min_quantity), "user_quantity_min")
         input_to_field(web_driver, str(edit_object.max_quantity), "user_quantity_max")
@@ -434,6 +475,14 @@ def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
         input_to_field(web_driver, str(int(edit_object.price)), "user_division_price")
         click_element_by_text(web_driver, "재등록", "button")
         click_element_by_text(web_driver, "확인", "button")
+        # close alert pop up
+        try:
+            WebDriverWait(web_driver, 10).until(EC.alert_is_present())
+            alert = web_driver.switch_to.alert
+            alert.accept()
+            print("Alert accepted successfully.")
+        except TimeoutException:
+            print("No alert found, continuing...")
         return True
     except TimeoutException:
         print(f"Time out: {url}")
@@ -446,6 +495,75 @@ def do_change_price(web_driver: WebDriver, im: IM, edit_object: EditPrice):
         return False
 
 
+def _verify_to_update(clickable_element , im: IM):
+    #Verify Min Stock
+    #Get parent element
+    td_elem = clickable_element.find_element(By.XPATH, "./ancestor::td[contains(@class, 'left')]")
+    maxStock = _get_max_quantity_from_td(td_elem);
+    print(f"get max stock: {maxStock}")
+    if im.IM_MINUPDATESTOCK and maxStock is not None:
+        if int(im.IM_MINUPDATESTOCK) > maxStock:
+            print(f"quantity lower than minimum stock")
+            return False
+    return True
+
+def _parse_korean_number_string(s: str) -> Optional[int]:
+    """
+    bao gồm các đơn vị '조' (nghìn tỷ), '억' (trăm triệu), '만' (chục nghìn).
+    Ví dụ: '99조9,999억' -> 99999900000000
+    """
+    if not s:
+        return None
+
+    s = s.replace(',', '').strip()
+
+    units = {'조': 10 ** 12, '억': 10 ** 8, '만': 10 ** 4}
+    total_value = 0
+    current_number_str = ""
+
+    for char in s:
+        if char.isdigit() or char == '.':
+            current_number_str += char
+        elif char in units:
+            if not current_number_str:
+                current_number_str = "1"  # Xử lý trường hợp "만" -> 1만
+            total_value += float(current_number_str) * units[char]
+            current_number_str = ""
+        # Bỏ qua các ký tự khác như '개'
+
+    # Cộng phần số còn lại (nếu có)
+    if current_number_str:
+        total_value += float(current_number_str)
+
+    return int(total_value) if total_value > 0 else None
+
+def _get_max_quantity_from_td(td_elem):
+    # Lấy text của td element
+    td_text = td_elem.text
+    print(f"TD text: {td_text}")
+
+    # Ví dụ: [67~1만9,000], [67~4,427], [1~14]
+    patterns = [
+        r"\[[\d,조억만]+~([\d,조억만]+)\]",  # Pattern [x~y]
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, td_text)
+        if match:
+            max_str = match.group(1)
+            print(f"Found max_str: {max_str}")
+            try:
+                result = _parse_korean_number_string(max_str)
+                print(f"Parsed result: {result}")
+                return result
+            except Exception as e:
+                print(f"Cannot parse number: {max_str}, error: {e}")
+                continue
+
+    print("Not found pattern [x~y]")
+    return None
+
+
 def main():
     edit_obj = EditPrice(
         min_quantity=67,
@@ -455,7 +573,7 @@ def main():
     )
     a = IM()
     sd = create_selenium_driver()
-    do_change_price(sd, a, edit_obj)
+    process_change_price(sd, a, edit_obj)
 
 
 if __name__ == "__main__":
