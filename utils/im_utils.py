@@ -265,8 +265,8 @@ def get_im_min_price(list_product: Dict, min_price_sheet, max_price_sheet) -> Op
                 print(
                     f"Invalid quantity for item {item.get('trade_subject', 'Unknown')}: {trade_quantity}, defaulting to 1")
                 _item_quantity = 1
-            # _price = _item_price / _item_quantity
-            _price = _item_price
+            _price = _item_price / _item_quantity
+            # _price = _item_price
             if min_price_sheet <= _price <= max_price_sheet:
                 filtered_list.append(
                     PriceItem(
