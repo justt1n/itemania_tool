@@ -19,7 +19,7 @@ from model.sheet_model import IM
 from utils.exceptions import PACrawlerError
 from utils.ggsheet import GSheet, Sheet
 from utils.im_utils import get_im_min_price, EditPrice, calc_min_quantity, process_change_price, login_first, \
-    create_selenium_driver, get_list_product
+    create_selenium_driver, get_list_product, PriceItem
 from utils.logger import setup_logging
 
 ### SETUP ###
@@ -118,30 +118,35 @@ def process(
             prod_list = get_list_product(browser, row.im)
             min_price_sheet = row.im.get_im_min_price()
             max_price_sheet = row.im.get_im_max_price()
-            min_price = get_im_min_price(prod_list, min_price_sheet, max_price_sheet)
+            competitor_item = get_im_min_price(prod_list, min_price_sheet, max_price_sheet)
             max_stock = row.im.get_im_stock()
-            if min_price is None:
-                print("No offer in range, set to min")
-                min_price = EditPrice(
-                    price=min_price_sheet,
-                    quantity_per_sell=row.im.IM_QUANTITY_GET_PRICE,
-                    min_quantity=calc_min_quantity(min_price_sheet, row.im),
-                    max_quantity=max_stock
-                )
-                final_price = min_price.price
-            else:
-                final_price = calculate_final_price(min_price, row.im, min_price_sheet, max_price_sheet)
 
+            # Xác định giá bán mới của bạn
+            if competitor_item is None:
+                # Nếu không có đối thủ, đặt giá bằng giá tối thiểu trong sheet
+                print("No offer in range, set to min")
+                final_price = min_price_sheet
+            else:
+                # Nếu có đối thủ, tính toán giá mới để cạnh tranh
+                final_price = calculate_final_price(competitor_item, row.im, min_price_sheet, max_price_sheet)
+
+            # Tạo đối tượng chứa thông tin giá sẽ được cập nhật
             edit_object = EditPrice(
                 price=final_price * row.im.IM_QUANTITY_GET_PRICE,
                 quantity_per_sell=row.im.IM_QUANTITY_GET_PRICE,
-                min_quantity=calc_min_quantity(min_price.price, row.im),
+                min_quantity=calc_min_quantity(final_price, row.im),
                 max_quantity=max_stock
             )
+
             print(edit_object)
             process_change_price(browser, row.im, edit_object)
-            print(f"Min price: {min_price.price}")
-            price_log_str = _create_log_price(edit_object, prod_list, min_price_sheet, max_price_sheet)
+
+            # In giá của đối thủ ra console (nếu có)
+            if competitor_item:
+                print(f"Competitor price: {competitor_item.price}")
+
+            # **Gọi hàm tạo log với đầy đủ tham số mới**
+            price_log_str = _create_log_price(edit_object, prod_list, min_price_sheet, max_price_sheet, competitor_item)
             write_to_log_cell(worksheet, index, price_log_str, log_type="price")
             try:
                 _row_time_sleep = float(os.getenv("SLEEP_TIME_EACH_ROUND"))
@@ -210,23 +215,59 @@ def write_to_log_cell(
         print(f"Error writing to log cell: {e}")
 
 
-def _create_log_price(min_price, prod_items: List[Dict[str, Any]], min_price_sheet, max_price_sheet):
-    log_header = f"""Cập nhật thành công lúc {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}, 
-    Price = {min_price.price} ; QUANTITY_PER_PRICE = {min_price.quantity_per_sell}
-    Stock min = {min_price.min_quantity}; Stock max = {min_price.max_quantity};
-    PriceMin = {min_price_sheet}, PriceMax = {max_price_sheet};
+def _create_log_price(
+    listing_details: EditPrice,
+    competitor_offers: List[Dict[str, Any]],
+    sheet_min_price: float,
+    sheet_max_price: float,
+    comparison_item: Optional[PriceItem]
+) -> str:
     """
-    offers_title = "\nCác offer có giá thấp hơn: \n"
+    Tạo chuỗi log chi tiết cho việc cập nhật giá.
+
+    Args:
+        listing_details: Đối tượng EditPrice chứa thông tin giá và số lượng sẽ được cập nhật.
+        competitor_offers: Danh sách đầy đủ các offer của đối thủ.
+        sheet_min_price: Giá tối thiểu được cấu hình trong sheet.
+        sheet_max_price: Giá tối đa được cấu hình trong sheet.
+        comparison_item: Đối tượng PriceItem của đối thủ được dùng để so sánh giá.
+                         Là None nếu không có đối thủ nào hợp lệ.
+
+    Returns:
+        Một chuỗi log đã được định dạng.
+    """
+    # Dòng tiêu đề và thông tin cơ bản
+    log_header = (
+        f"Cập nhật thành công lúc {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}, "
+        f"Price = {int(listing_details.price)} ; QUANTITY_GET_PRICE = {listing_details.quantity_per_sell}\n"
+        f"Stock min = {listing_details.min_quantity}; Stock max = {listing_details.max_quantity};\n"
+        f"PriceMin = {int(sheet_min_price)}, PriceMax = {int(sheet_max_price)};"
+    )
+
+    # Dòng thông tin về đối thủ được dùng để so sánh
+    if comparison_item:
+        competitor_line = f"GiaSoSanh={int(comparison_item.price)}, Seller {comparison_item.info}\n"
+        competitor_line += f"Title: {comparison_item.title or 'N/A'}"
+    else:
+        competitor_line = "GiaSoSanh=N/A, Seller N/A" # Trường hợp không tìm thấy đối thủ
+
+    # Tiêu đề cho danh sách các offer
+    offers_title = "\nCác offer có giá thấp hơn:"
+
+    # Chi tiết danh sách các offer
     offer_details = ""
-    if not prod_items:
-        offer_details = "Không có offer nào thấp hơn."
+    if not competitor_offers:
+        offer_details = "\nKhông có offer nào thấp hơn."
     else:
         offer_lines = [
-            f"{index}/ <{item.get('trade_subject', 'N/A')}> price = {item.get('trade_money', 'N/A')};"
-            for index, item in enumerate(prod_items[:3], start=1)
+            f"{index}/ {item.get('trade_subject', 'N/A')} price = {item.get('trade_money', 'N/A')};"
+            for index, item in enumerate(competitor_offers[:5], start=1)
         ]
-        offer_details = "\n".join(offer_lines)
-    return log_header + offers_title + offer_details
+        offer_details = "\n" + "\n".join(offer_lines)
+
+    # Kết hợp tất cả các phần thành chuỗi log cuối cùng
+    return f"{log_header}\n{competitor_line}{offers_title}{offer_details}"
+
 
 
 ### MAIN ###
