@@ -182,7 +182,7 @@ def calculate_final_price(
 ) -> float:
     price_step = im.IM_DONGIA_GIAM_MIN
 
-    competitor_price = min_price.price * im.IM_QUANTITY_GET_PRICE
+    competitor_price = min_price.price
 
     proposed_price = competitor_price - price_step
 
