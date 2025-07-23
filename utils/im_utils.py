@@ -198,6 +198,8 @@ def filter_trades_by_subject(trade_list: List[Dict[str, Any]], im: IM) -> List[D
     excl_keywords = [keyword.strip() for keyword in excl_str.split(',') if keyword.strip()]
 
     for item in trade_list:
+        if item.get('trade_state') == 'p':
+            continue
         subject = item.get('trade_subject', '')
 
         include_match = not incl_keywords or any(keyword in subject for keyword in incl_keywords)
