@@ -328,6 +328,7 @@ class EditPrice(BaseModel):
     price: float
     min_quantity: int = 1
     max_quantity: int = 99999
+    price_reduction: float = 0
 
 
 def calc_min_quantity(price, im: IM) -> int:

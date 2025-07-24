@@ -129,13 +129,14 @@ def process(
             else:
                 # Nếu có đối thủ, tính toán giá mới để cạnh tranh
                 final_price = calculate_final_price(competitor_item, row.im, min_price_sheet, max_price_sheet)
-
+            final_price = final_price * row.im.IM_QUANTITY_GET_PRICE
             # Tạo đối tượng chứa thông tin giá sẽ được cập nhật
             edit_object = EditPrice(
-                price=final_price * row.im.IM_QUANTITY_GET_PRICE,
+                price=final_price,
                 quantity_per_sell=row.im.IM_QUANTITY_GET_PRICE,
                 min_quantity=calc_min_quantity(final_price, row.im),
-                max_quantity=max_stock
+                max_quantity=max_stock,
+                price_reduction=row.im.IM_DONGIA_GIAM_MIN,
             )
 
             print(edit_object)
@@ -180,7 +181,11 @@ def calculate_final_price(
     min: float,
     max: float
 ) -> float:
-    price_step = im.IM_DONGIA_GIAM_MIN
+    quantity_per_sell = im.IM_QUANTITY_GET_PRICE
+    if quantity_per_sell and quantity_per_sell <= 0:
+        quantity_per_sell = 1
+
+    price_step = im.IM_DONGIA_GIAM_MIN / quantity_per_sell
 
     competitor_price = min_price.price
 

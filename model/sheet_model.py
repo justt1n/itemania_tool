@@ -273,7 +273,7 @@ class IM(BaseGSheetModel):
     IM_IS_UPDATE_ORDER_MIN: Annotated[int | None, "L"] = 0
     IM_TOTAL_ORDER_MIN: Annotated[int | None, "M"] = 0
     IM_HE_SO_LAM_TRON: Annotated[int | None, "N"] = 0
-    IM_QUANTITY_GET_PRICE: Annotated[int | None, "O"] = 0
+    IM_QUANTITY_GET_PRICE: Annotated[int | None, "O"] = 1
     IM_ID_SHEET_MIN: Annotated[str | None, "P"] = ''
     IM_SHEET_MIN: Annotated[str | None, "Q"] = ''
     IM_CELL_MIN: Annotated[str | None, "R"] = ''
