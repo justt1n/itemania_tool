@@ -335,7 +335,7 @@ def calc_min_quantity(price, im: IM) -> int:
     if price > im.IM_TOTAL_ORDER_MIN:
         return 1
     if im.IM_IS_UPDATE_ORDER_MIN:
-        tmp_min_quantity = ceil_up(im.IM_TOTAL_ORDER_MIN / price, im.IM_HE_SO_LAM_TRON)
+        tmp_min_quantity = ceil_up(im.IM_TOTAL_ORDER_MIN / price * im.IM_QUANTITY_GET_PRICE, im.IM_HE_SO_LAM_TRON)
     else:
         tmp_min_quantity = math.ceil(im.IM_TOTAL_ORDER_MIN / price)
     return tmp_min_quantity
@@ -369,7 +369,7 @@ def input_to_field(web_driver: WebDriver, text: str, input_id: str):
 
         input_field.send_keys(text)
 
-        print("Successfully entered 'abc' into the input field.")
+        # print("Successfully entered 'abc' into the input field.")
     except Exception as e:
         print(f"Error when input to field {input_id} : {e}")
 
@@ -382,7 +382,7 @@ def click_element_by_text(web_driver: WebDriver, text: str, tag: str = '*'):
             EC.element_to_be_clickable((By.XPATH, xpath_selector))
         )
         clickable_element.click()
-        print(f"Successfully clicked on element with text: '{text}'")
+        # print(f"Successfully clicked on element with text: '{text}'")
 
     except Exception as e:
         print(f"Error when trying to click element with text '{text}': {e}")
@@ -410,7 +410,7 @@ def click_element_by_text_robust(web_driver: WebDriver, text: str, tag: str = '*
             EC.element_to_be_clickable((By.XPATH, xpath_selector))
         )
         clickable_element.click()
-        print(f"Successfully clicked on element containing text: '{text}'")
+        # print(f"Successfully clicked on element containing text: '{text}'")
 
     except Exception as e:
         print(f"Error when trying to click element with text '{text}': {e}")
