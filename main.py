@@ -121,16 +121,12 @@ def process(
             competitor_item = get_im_min_price(prod_list, min_price_sheet, max_price_sheet)
             max_stock = row.im.get_im_stock()
 
-            # Xác định giá bán mới của bạn
             if competitor_item is None:
-                # Nếu không có đối thủ, đặt giá bằng giá tối thiểu trong sheet
-                print("No offer in range, set to min")
-                final_price = min_price_sheet
+                print("No offer in range, set to max")
+                final_price = max_price_sheet
             else:
-                # Nếu có đối thủ, tính toán giá mới để cạnh tranh
                 final_price = calculate_final_price(competitor_item, row.im, min_price_sheet, max_price_sheet)
             final_price = final_price * row.im.IM_QUANTITY_GET_PRICE
-            # Tạo đối tượng chứa thông tin giá sẽ được cập nhật
             edit_object = EditPrice(
                 price=final_price,
                 quantity_per_sell=row.im.IM_QUANTITY_GET_PRICE,
@@ -142,11 +138,9 @@ def process(
             print(edit_object)
             process_change_price(browser, row.im, edit_object)
 
-            # In giá của đối thủ ra console (nếu có)
             if competitor_item:
                 print(f"Competitor price: {competitor_item.price}")
 
-            # **Gọi hàm tạo log với đầy đủ tham số mới**
             price_log_str = _create_log_price(edit_object, prod_list, min_price_sheet, max_price_sheet, competitor_item)
             write_to_log_cell(worksheet, index, price_log_str, log_type="price")
             try:
